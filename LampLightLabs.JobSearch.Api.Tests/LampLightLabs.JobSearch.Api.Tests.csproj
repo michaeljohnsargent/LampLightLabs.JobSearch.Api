@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MyWebApp\LampLightLabs.JobSearch.Api.csproj" />
+    <ProjectReference Include="..\LampLightLabs.JobSearch.Api\LampLightLabs.JobSearch.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

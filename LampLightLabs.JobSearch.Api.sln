@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.34330.188
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LampLightLabs.JobSearch.Api", "MyWebApp\LampLightLabs.JobSearch.Api.csproj", "{48424081-514E-441A-86DD-737936B32E35}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LampLightLabs.JobSearch.Api", "LampLightLabs.JobSearch.Api\LampLightLabs.JobSearch.Api.csproj", "{48424081-514E-441A-86DD-737936B32E35}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LampLightLabs.JobSearch.Api.Tests", "LampLightLabs.JobSearch.Api.Tests\LampLightLabs.JobSearch.Api.Tests.csproj", "{33EBDCB1-0801-4E72-955B-8F2C7CEF33F0}"
 EndProject
