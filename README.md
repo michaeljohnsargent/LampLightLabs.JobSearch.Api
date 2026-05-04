@@ -21,7 +21,7 @@ The `JobsController` demonstrates a production-relevant API pattern: accepting a
 ### Applications
 | Method | Route | Description |
 |---|---|---|
-| GET | `/api/applicationcontroller1/fromcsv` | Returns all job applications read from the pipeline CSV |
+| GET | `/api/applicationcontroller/fromcsv` | Returns all job applications read from the pipeline CSV |
 
 ### Jobs
 | Method | Route | Description |
@@ -55,7 +55,7 @@ Client                          Server
 ```
 LampLightLabs.JobSearch.Api/
 ├── Controllers/
-│   ├── ApplicationsController1.cs   - CSV pipeline reader
+│   ├── ApplicationsController.cs   - CSV pipeline reader
 │   └── JobsController.cs            - Async job pattern endpoints
 ├── Models/
 │   └── JobRecord.cs                 - Job state model and JobStatus enum

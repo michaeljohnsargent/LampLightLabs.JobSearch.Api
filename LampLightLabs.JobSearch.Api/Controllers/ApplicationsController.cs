@@ -1,29 +1,30 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using LampLightLabs.JobSearch.Api.Services;
-
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+﻿using LampLightLabs.JobSearch.Api.Services;
+using Microsoft.AspNetCore.Mvc;
 
 namespace LampLightLabs.JobSearch.Api.Controllers
 {
+    /// <summary>
+    /// Controller for retrieving job application pipeline data.
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     public class ApplicationsController : ControllerBase
     {
         private readonly ICsvReaderService _csv;
-        
+
+        /// <summary>
+        /// Constructor that accepts the CSV reader service via dependency injection.
+        /// </summary>
+        /// <param name="csv">The CSV reader service.</param>
         public ApplicationsController(ICsvReaderService csv)
         {
             _csv = csv;
         }
 
-        //// GET: api/<ApplicationsController1>
-        //[HttpGet]
-        //public IEnumerable<string> Get()
-        //{
-        //    return new string[] { "value1", "value2" };
-        //}
-
-
+        /// <summary>
+        /// Reads job applications from the pipeline CSV file and returns them as a list.
+        /// </summary>
+        /// <returns>A list of job applications with their current pipeline states.</returns>
         [HttpGet("fromcsv")]
         public IActionResult GetFromCsv()
         {
@@ -34,30 +35,5 @@ namespace LampLightLabs.JobSearch.Api.Controllers
             var rows = _csv.ReadCsv(filePath);
             return Ok(rows);
         }
-
-        //// GET api/<ApplicationsController1>/5
-        //[HttpGet("{id}")]
-        //public string Get(int id)
-        //{
-        //    return "value";
-        //}
-
-        //// POST api/<ApplicationsController1>
-        //[HttpPost]
-        //public void Post([FromBody] string value)
-        //{
-        //}
-
-        //// PUT api/<ApplicationsController1>/5
-        //[HttpPut("{id}")]
-        //public void Put(int id, [FromBody] string value)
-        //{
-        //}
-
-        //// DELETE api/<ApplicationsController1>/5
-        //[HttpDelete("{id}")]
-        //public void Delete(int id)
-        //{
-        //}
     }
 }
