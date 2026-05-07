@@ -1,4 +1,5 @@
-﻿using LampLightLabs.JobSearch.Api.Models;
+﻿using Asp.Versioning;
+using LampLightLabs.JobSearch.Api.Models;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,7 +8,8 @@ namespace LampLightLabs.JobSearch.Api.Controllers
     /// <summary>
     /// Controller for managing job processing.
     /// </summary>
-    [Route("api/[controller]")]
+    [ApiVersion(1)]
+    [Route("api/v{v:apiVersion}/[controller]")]
     [ApiController]
     public class JobsController : ControllerBase
     {
