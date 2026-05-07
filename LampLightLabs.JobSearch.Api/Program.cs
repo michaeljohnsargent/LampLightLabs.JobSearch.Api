@@ -1,5 +1,6 @@
-using LampLightLabs.JobSearch.Api.Services;
 using Asp.Versioning;
+using LampLightLabs.JobSearch.Api.Services;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,7 +24,11 @@ builder.Services.AddApiVersioning(options =>
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "LampLightLabs.JobSearch.Api", Version = "v1" });
+    options.SwaggerDoc("v2", new OpenApiInfo { Title = "LampLightLabs.JobSearch.Api", Version = "v2" });
+});
 
 // ... existing registrations
 builder.Services.AddScoped<ICsvReaderService, CsvReaderService>();
@@ -35,7 +40,12 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    // Tell Swagger UI to show both v1 and v2 definitions
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
+        options.SwaggerEndpoint("/swagger/v2/swagger.json", "v2");
+    });
 }
 
 app.UseHttpsRedirection();
