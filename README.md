@@ -1,4 +1,4 @@
-# LampLightLabs.JobSearch.Api
+markdown# LampLightLabs.JobSearch.Api
 
 A personal ASP.NET Core Web API project built by **Michael Sargent** to dust off and sharpen API development skills following a career transition in early 2026.
 
@@ -18,59 +18,67 @@ The `JobsController` demonstrates a production-relevant API pattern: accepting a
 
 ## Endpoints
 
+All endpoints are versioned using URL segment versioning (`/api/v{version}/...`).
+
 ### Applications
-| Method | Route | Description |
-|---|---|---|
-| GET | `/api/applicationcontroller/fromcsv` | Returns all job applications read from the pipeline CSV |
+| Method | Route | Version | Description |
+|---|---|---|---|
+| GET | `/api/v1/applications/fromcsv` | v1 | Returns all job applications read from the pipeline CSV |
 
 ### Jobs
-| Method | Route | Description |
-|---|---|---|
-| POST | `/api/jobs/start` | Starts a background job, returns job ID immediately |
-| GET | `/api/jobs/{jobId}/status` | Polls the status of a running or completed job |
+| Method | Route | Version | Description |
+|---|---|---|---|
+| POST | `/api/v1/jobs/start` | v1 | Starts a background job, returns job ID immediately |
+| GET | `/api/v1/jobs/{jobId}/status` | v1 | Polls the status of a running or completed job |
+
+---
+
+## API Versioning
+
+This project uses URL segment versioning via the `Asp.Versioning.Mvc` library.
+
+- Version is embedded in the URL path: `/api/v1/...`
+- Unversioned requests default to v1
+- Supported versions are reported in the `api-supported-versions` response header
+- Swagger UI reflects the active version definition
+
+This pattern mirrors production API design where multiple versions coexist without breaking existing consumers.
 
 ---
 
 ## Async Job Pattern - How It Works
-
-```
 Client                          Server
-  |                               |
-  |-- POST /api/jobs/start ------>|  Returns 202 Accepted + jobId immediately
-  |<-- { jobId, status: Queued } -|  Background work starts
-  |                               |
-  |-- GET /api/jobs/{jobId}/status|  Poll #1
-  |<-- { status: Processing } ----|
-  |                               |
-  |-- GET /api/jobs/{jobId}/status|  Poll #2 (after delay)
-  |<-- { status: Complete,        |
-  |      result: "Processed 29    |
-  |      applications" }          |
-```
+|                               |
+|-- POST /api/v1/jobs/start --->|  Returns 202 Accepted + jobId immediately
+|<-- { jobId, status: Queued } -|  Background work starts
+|                               |
+|-- GET /api/v1/jobs/{jobId}/status|  Poll #1
+|<-- { status: Processing } ----|
+|                               |
+|-- GET /api/v1/jobs/{jobId}/status|  Poll #2 (after delay)
+|<-- { status: Complete,        |
+|      result: "Processed 29    |
+|      applications" }          |
 
 ---
 
 ## Project Structure
-
-```
 LampLightLabs.JobSearch.Api/
 ├── Controllers/
-│   ├── ApplicationsController.cs   - CSV pipeline reader
-│   └── JobsController.cs            - Async job pattern endpoints
+│   ├── ApplicationsController.cs   - CSV pipeline reader (v1)
+│   └── JobsController.cs           - Async job pattern endpoints (v1)
 ├── Models/
-│   └── JobRecord.cs                 - Job state model and JobStatus enum
+│   └── JobRecord.cs                - Job state model and JobStatus enum
 ├── Services/
-│   ├── ICsvReaderService.cs         - CSV reader interface
-│   ├── CsvReaderService.cs          - CsvHelper implementation
-│   └── JobStore.cs                  - Thread-safe in-memory job store
+│   ├── ICsvReaderService.cs        - CSV reader interface
+│   ├── CsvReaderService.cs         - CsvHelper implementation
+│   └── JobStore.cs                 - Thread-safe in-memory job store
 ├── TestData/
-│   └── applications.csv             - Live job search pipeline data
-└── Program.cs                       - DI registration and middleware
-
+│   └── applications.csv            - Live job search pipeline data
+└── Program.cs                      - DI registration and middleware
 LampLightLabs.JobSearch.Api.Tests/
-├── CsvReaderServiceTests.cs         - 4 unit tests
-└── JobStoreTests.cs                 - 5 unit tests
-```
+├── CsvReaderServiceTests.cs        - 4 unit tests
+└── JobStoreTests.cs                - 5 unit tests
 
 ---
 
@@ -78,6 +86,7 @@ LampLightLabs.JobSearch.Api.Tests/
 
 - .NET 8.0
 - ASP.NET Core Web API
+- Asp.Versioning.Mvc 8.1.0
 - CsvHelper
 - xUnit v3
 - Moq
@@ -105,6 +114,8 @@ LampLightLabs.JobSearch.Api.Tests/
 ---
 
 ## Key Design Decisions
+
+**URL segment versioning** - Version is embedded directly in the route path (`/api/v1/...`). This is the most explicit and widely adopted strategy for public APIs - visible at a glance, easy to test in a browser, and cache-friendly.
 
 **CsvHelper over manual parsing** - The job search CSV contains multi-line quoted fields in the Notes column. A hand-rolled `ReadLine()` parser breaks on these. CsvHelper handles RFC 4180 compliant CSV correctly out of the box.
 
