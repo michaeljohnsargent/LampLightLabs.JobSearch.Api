@@ -1,4 +1,4 @@
-markdown# LampLightLabs.JobSearch.Api
+# LampLightLabs.JobSearch.Api
 
 A personal ASP.NET Core Web API project built by **Michael Sargent** to dust off and sharpen API development skills following a career transition in early 2026.
 
@@ -23,7 +23,8 @@ All endpoints are versioned using URL segment versioning (`/api/v{version}/...`)
 ### Applications
 | Method | Route | Version | Description |
 |---|---|---|---|
-| GET | `/api/v1/applications/fromcsv` | v1 | Returns all job applications read from the pipeline CSV |
+| GET | `/api/v1/applications/fromcsv` | v1 | Returns raw job application records from the pipeline CSV |
+| GET | `/api/v2/applications/fromcsv` | v2 | Returns enriched records with calculated pipeline intelligence fields |
 
 ### Jobs
 | Method | Route | Version | Description |
@@ -37,12 +38,24 @@ All endpoints are versioned using URL segment versioning (`/api/v{version}/...`)
 
 This project uses URL segment versioning via the `Asp.Versioning.Mvc` library.
 
-- Version is embedded in the URL path: `/api/v1/...`
+- Version is embedded in the URL path: `/api/v1/...`, `/api/v2/...`
 - Unversioned requests default to v1
 - Supported versions are reported in the `api-supported-versions` response header
-- Swagger UI reflects the active version definition
+- Swagger UI reflects both version definitions in the dropdown
 
-This pattern mirrors production API design where multiple versions coexist without breaking existing consumers.
+### What Changed Between V1 and V2
+
+**V1** returns raw CSV data as-is. No transformation, no calculation.
+
+**V2** returns the same base fields plus three calculated fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `daysInPipeline` | int | Number of days since the application was submitted |
+| `isFollowUpToday` | bool | True if the follow-up date matches today |
+| `statusCategory` | string | Derived grouping: Active, OnHold, or Closed |
+
+This mirrors a real-world versioning scenario - V1 consumers continue working unchanged while V2 consumers get enriched data with business logic applied server-side.
 
 ---
 
@@ -65,20 +78,27 @@ Client                          Server
 ## Project Structure
 LampLightLabs.JobSearch.Api/
 ├── Controllers/
-│   ├── ApplicationsController.cs   - CSV pipeline reader (v1)
-│   └── JobsController.cs           - Async job pattern endpoints (v1)
+│   ├── V1/
+│   │   ├── ApplicationsController.cs   - Returns raw CSV data (v1)
+│   │   └── JobsController.cs           - Async job pattern endpoints (v1)
+│   └── V2/
+│       └── ApplicationsController.cs   - Returns enriched data with calculated fields (v2)
 ├── Models/
-│   └── JobRecord.cs                - Job state model and JobStatus enum
+│   ├── V1/
+│   │   └── ApplicationResponse.cs      - Raw CSV field mapping
+│   ├── V2/
+│   │   └── ApplicationResponse.cs      - Adds DaysInPipeline, IsFollowUpToday, StatusCategory
+│   └── JobRecord.cs                    - Job state model and JobStatus enum
 ├── Services/
-│   ├── ICsvReaderService.cs        - CSV reader interface
-│   ├── CsvReaderService.cs         - CsvHelper implementation
-│   └── JobStore.cs                 - Thread-safe in-memory job store
+│   ├── ICsvReaderService.cs            - CSV reader interface
+│   ├── CsvReaderService.cs             - CsvHelper implementation
+│   └── JobStore.cs                     - Thread-safe in-memory job store
 ├── TestData/
-│   └── applications.csv            - Live job search pipeline data
-└── Program.cs                      - DI registration and middleware
+│   └── applications.csv                - Live job search pipeline data
+└── Program.cs                          - DI registration and middleware
 LampLightLabs.JobSearch.Api.Tests/
-├── CsvReaderServiceTests.cs        - 4 unit tests
-└── JobStoreTests.cs                - 5 unit tests
+├── CsvReaderServiceTests.cs            - 4 unit tests
+└── JobStoreTests.cs                    - 5 unit tests
 
 ---
 
@@ -106,6 +126,7 @@ LampLightLabs.JobSearch.Api.Tests/
 3. Set `LampLightLabs.JobSearch.Api` as the startup project
 4. Press `F5` to run
 5. Swagger UI will open automatically at `https://localhost:{port}/swagger`
+6. Use the dropdown in the top right to switch between v1 and v2 definitions
 
 **Running Tests:**
 - Open Test Explorer (`Ctrl+E, T`)
@@ -115,7 +136,11 @@ LampLightLabs.JobSearch.Api.Tests/
 
 ## Key Design Decisions
 
-**URL segment versioning** - Version is embedded directly in the route path (`/api/v1/...`). This is the most explicit and widely adopted strategy for public APIs - visible at a glance, easy to test in a browser, and cache-friendly.
+**URL segment versioning** - Version is embedded directly in the route path (`/api/v1/...`, `/api/v2/...`). This is the most explicit and widely adopted strategy for public APIs - visible at a glance, easy to test in a browser, and cache-friendly.
+
+**Separate controller and model folders per version** - V1 and V2 controllers live in `Controllers/V1` and `Controllers/V2`. Models follow the same pattern. This mirrors production codebases where versions are isolated from each other - a change to V2 cannot accidentally break V1.
+
+**Calculated fields in V2, not V1** - V1 returns raw data. V2 applies business logic server-side. This is the correct versioning pattern - rather than modifying an existing contract, a new version introduces the enriched shape while V1 remains stable and unchanged.
 
 **CsvHelper over manual parsing** - The job search CSV contains multi-line quoted fields in the Notes column. A hand-rolled `ReadLine()` parser breaks on these. CsvHelper handles RFC 4180 compliant CSV correctly out of the box.
 

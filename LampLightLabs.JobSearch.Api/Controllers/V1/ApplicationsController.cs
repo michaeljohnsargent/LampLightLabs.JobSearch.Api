@@ -2,10 +2,10 @@
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace LampLightLabs.JobSearch.Api.Controllers
+namespace LampLightLabs.JobSearch.Api.Controllers.V1
 {
     /// <summary>
-    /// Controller for retrieving job application pipeline data.
+    /// V1 - Returns raw job application data from the pipeline CSV.
     /// </summary>
     [ApiVersion(1)]
     [Route("api/v{v:apiVersion}/[controller]")]
@@ -24,9 +24,9 @@ namespace LampLightLabs.JobSearch.Api.Controllers
         }
 
         /// <summary>
-        /// Reads job applications from the pipeline CSV file and returns them as a list.
+        /// Returns raw job applications read directly from the pipeline CSV.
         /// </summary>
-        /// <returns>A list of job applications with their current pipeline states.</returns>
+        /// <returns>A list of raw job application records.</returns>
         [HttpGet("fromcsv")]
         public IActionResult GetFromCsv()
         {
