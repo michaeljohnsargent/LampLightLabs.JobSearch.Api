@@ -1,4 +1,5 @@
 ﻿using Asp.Versioning;
+using LampLightLabs.JobSearch.Api.Attributes;
 using LampLightLabs.JobSearch.Api.Models.V2;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -8,9 +9,10 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
 {
     /// <summary>
     /// V2 - Returns job application data with calculated pipeline intelligence fields.
-    /// Requires JWT bearer token authentication.
+    /// Demonstrates two authentication schemes:
+    /// - GET /fromcsv requires JWT bearer token (user-facing data endpoint).
+    /// - GET /status requires an API key (service-to-service status endpoint).
     /// </summary>
-    [Authorize]
     [ApiVersion(2)]
     [Route("api/v{v:apiVersion}/[controller]")]
     [ApiController]
@@ -29,8 +31,10 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
 
         /// <summary>
         /// Returns job applications with calculated fields: DaysInPipeline, IsFollowUpToday, StatusCategory.
+        /// Requires JWT bearer token authentication.
         /// </summary>
         /// <returns>A list of enriched job application records.</returns>
+        [Authorize]
         [HttpGet("fromcsv")]
         public IActionResult GetFromCsv()
         {
@@ -70,6 +74,23 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
             }).ToList();
 
             return Ok(result);
+        }
+
+        /// <summary>
+        /// Returns a lightweight pipeline status response.
+        /// Requires API key authentication via Authorization: ApiKey {key} header.
+        /// </summary>
+        /// <returns>A status object confirming the API is operational.</returns>
+        [ApiKeyAuth]
+        [HttpGet("status")]
+        public IActionResult GetStatus()
+        {
+            return Ok(new
+            {
+                Status = "Operational",
+                Version = "v2",
+                Timestamp = DateTime.UtcNow
+            });
         }
 
         private static string CategorizeStatus(string status)
