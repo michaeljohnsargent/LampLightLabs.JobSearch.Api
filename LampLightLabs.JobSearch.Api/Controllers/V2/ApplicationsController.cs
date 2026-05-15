@@ -1,13 +1,16 @@
 ﻿using Asp.Versioning;
 using LampLightLabs.JobSearch.Api.Models.V2;
 using LampLightLabs.JobSearch.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LampLightLabs.JobSearch.Api.Controllers.V2
 {
     /// <summary>
     /// V2 - Returns job application data with calculated pipeline intelligence fields.
+    /// Requires JWT bearer token authentication.
     /// </summary>
+    [Authorize]
     [ApiVersion(2)]
     [Route("api/v{v:apiVersion}/[controller]")]
     [ApiController]
