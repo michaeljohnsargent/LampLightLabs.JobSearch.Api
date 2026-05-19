@@ -1,8 +1,10 @@
 using Asp.Versioning;
+using LampLightLabs.JobSearch.Api.Filters;
 using LampLightLabs.JobSearch.Api.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,7 +46,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
-    });
+    })
+    .AddScheme<AuthenticationSchemeOptions, LampLightLabs.JobSearch.Api.Authentication.BasicAuthHandler>("Basic", null);
+    
+
 
 // Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -63,7 +68,16 @@ builder.Services.AddSwaggerGen(options =>
         In = ParameterLocation.Header,
         Description = "Enter your JWT token from POST /api/v1/auth/token"
     });
+    options.AddSecurityDefinition("Basic", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "basic",
+        In = ParameterLocation.Header,
+        Description = "Enter username and password for Basic authentication."
+    });
 
+    options.OperationFilter<BasicAuthOperationFilter>();
 });
 
 // Services
