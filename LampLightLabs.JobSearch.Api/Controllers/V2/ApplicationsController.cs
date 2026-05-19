@@ -93,6 +93,21 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
             });
         }
 
+        /// <summary>
+        /// Returns the count of job applications in the CSV file.
+        /// Requires Basic authentication.
+        /// </summary>
+        /// <returns>The count of job applications.</returns>
+        [Authorize(AuthenticationSchemes = "Basic")]
+        [HttpGet("count")]
+        public IActionResult GetCount ()
+        {
+            var filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TestData", "applications.csv");
+            if (!System.IO.File.Exists(filePath))
+                return NotFound($"File not found: {filePath}");
+            var rows = _csv.ReadCsv(filePath);
+            return Ok(new { Count = rows.Count() });
+        }
         private static string CategorizeStatus(string status)
         {
             var s = status.ToLower();
