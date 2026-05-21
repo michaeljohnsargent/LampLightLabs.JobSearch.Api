@@ -6,7 +6,7 @@ A personal ASP.NET Core Web API project built by **Michael Sargent** to dust off
 
 ## What This Project Does
 
-This project serves two purposes:
+This project serves three purposes:
 
 **1. Job Search Pipeline Tracker**
 The `ApplicationsController` reads a CSV file containing job applications and their current pipeline states, exposing that data via a REST endpoint. It uses CsvHelper to correctly handle quoted multi-line fields - a real-world parsing challenge solved during development.
@@ -14,23 +14,73 @@ The `ApplicationsController` reads a CSV file containing job applications and th
 **2. Async Long-Running Job Pattern (Exercise)**
 The `JobsController` demonstrates a production-relevant API pattern: accepting a long-running request, returning a job ID immediately with `202 Accepted`, processing work asynchronously in the background, and exposing a polling endpoint the client can call to check job status. This pattern is common in compliance processing, batch operations, and file export workflows.
 
+**3. Authentication Showcase**
+Each endpoint in the project demonstrates a different authentication scheme: JWT Bearer, API Key, Basic Auth, and OAuth 2.0 Client Credentials. This mirrors real-world backend APIs where different consumers (users, services, integrations) require different auth patterns on different endpoints.
+
 ---
 
 ## Endpoints
 
 All endpoints are versioned using URL segment versioning (`/api/v{version}/...`).
 
-### Applications
-| Method | Route | Version | Description |
+### Auth
+| Method | Route | Auth | Description |
 |---|---|---|---|
-| GET | `/api/v1/applications/fromcsv` | v1 | Returns raw job application records from the pipeline CSV |
-| GET | `/api/v2/applications/fromcsv` | v2 | Returns enriched records with calculated pipeline intelligence fields |
+| POST | `/api/v1/auth/token` | None | Accepts username/password, returns a signed JWT bearer token |
+| POST | `/oauth/token` | None | Accepts client_id/client_secret (form), returns a client-scoped JWT (OAuth 2.0 Client Credentials) |
+
+### Applications
+| Method | Route | Version | Auth | Description |
+|---|---|---|---|---|
+| GET | `/api/v1/applications/fromcsv` | v1 | None | Returns raw job application records from the pipeline CSV |
+| GET | `/api/v2/applications/fromcsv` | v2 | JWT Bearer | Returns enriched records with calculated pipeline intelligence fields |
+| GET | `/api/v2/applications/status` | v2 | API Key | Returns lightweight pipeline status confirming the API is operational |
+| GET | `/api/v2/applications/count` | v2 | Basic Auth | Returns the total count of applications in the pipeline CSV |
+| GET | `/api/v2/applications/stats` | v2 | JWT Bearer (OAuth) | Returns aggregate pipeline statistics: totals, breakdowns, averages |
 
 ### Jobs
-| Method | Route | Version | Description |
-|---|---|---|---|
-| POST | `/api/v1/jobs/start` | v1 | Starts a background job, returns job ID immediately |
-| GET | `/api/v1/jobs/{jobId}/status` | v1 | Polls the status of a running or completed job |
+| Method | Route | Version | Auth | Description |
+|---|---|---|---|---|
+| POST | `/api/v1/jobs/start` | v1 | None | Starts a background job, returns job ID immediately |
+| GET | `/api/v1/jobs/{jobId}/status` | v1 | None | Polls the status of a running or completed job |
+
+---
+
+## Authentication
+
+This project demonstrates four authentication schemes, each protecting a different endpoint to illustrate real-world usage patterns.
+
+### JWT Bearer
+Standard user-facing auth. POST credentials to `/api/v1/auth/token`, receive a signed JWT, pass it as `Authorization: Bearer {token}` on protected requests.
+
+- Protected endpoints: `GET /api/v2/applications/fromcsv`, `GET /api/v2/applications/stats`
+- Token issued by `TokenService`, validated by ASP.NET Core JWT Bearer middleware
+- Key, issuer, audience, and expiry configured in `appsettings.json` under `Jwt`
+
+### API Key
+Service-to-service auth where a shared secret is passed in the request header. No token issuance - the key is validated on every request.
+
+- Protected endpoint: `GET /api/v2/applications/status`
+- Implemented as `ApiKeyAuthAttribute` (IAuthorizationFilter) - keeps auth logic out of the controller
+- Key configured in `appsettings.json` under `ApiKey`
+- Header: `Authorization: ApiKey {key}`
+
+### Basic Auth
+Legacy/simple auth scheme. Credentials are Base64-encoded and passed in the Authorization header on every request.
+
+- Protected endpoint: `GET /api/v2/applications/count`
+- Implemented as `BasicAuthHandler` chained onto the existing JWT scheme without overwriting it
+- Credentials configured in `appsettings.json` under `BasicAuth`
+- Header: `Authorization: Basic {base64(username:password)}`
+
+### OAuth 2.0 Client Credentials
+Machine-to-machine auth. A client application authenticates with its client_id and client_secret to receive a JWT. No user context - the token represents the application, not a person.
+
+- Protected endpoint: `GET /api/v2/applications/stats`
+- Token endpoint: `POST /oauth/token` (outside versioning - auth infrastructure does not belong to a version)
+- Request format: `application/x-www-form-urlencoded` per the OAuth 2.0 spec
+- Clients configured in `appsettings.json` under `OAuthClients`
+- Token claims: `sub` (clientId), `client_id`, `scope`, `jti`, `exp`
 
 ---
 
@@ -60,45 +110,75 @@ This mirrors a real-world versioning scenario - V1 consumers continue working un
 ---
 
 ## Async Job Pattern - How It Works
+```
 Client                          Server
 |                               |
 |-- POST /api/v1/jobs/start --->|  Returns 202 Accepted + jobId immediately
 |<-- { jobId, status: Queued } -|  Background work starts
 |                               |
-|-- GET /api/v1/jobs/{jobId}/status|  Poll #1
+|-- GET /api/v1/jobs/{id}/status|  Poll #1
 |<-- { status: Processing } ----|
 |                               |
-|-- GET /api/v1/jobs/{jobId}/status|  Poll #2 (after delay)
+|-- GET /api/v1/jobs/{id}/status|  Poll #2 (after delay)
 |<-- { status: Complete,        |
 |      result: "Processed 29    |
 |      applications" }          |
+```
 
 ---
 
 ## Project Structure
+
+```
 LampLightLabs.JobSearch.Api/
+├── Authentication/
+│   └── BasicAuthHandler.cs             - Custom auth handler chained onto JWT scheme
+├── Attributes/
+│   └── ApiKeyAuthAttribute.cs          - IAuthorizationFilter for API key validation
 ├── Controllers/
+│   ├── OAuthController.cs              - POST /oauth/token (outside versioning)
 │   ├── V1/
 │   │   ├── ApplicationsController.cs   - Returns raw CSV data (v1)
+│   │   ├── AuthController.cs           - POST /api/v1/auth/token (JWT issuance)
 │   │   └── JobsController.cs           - Async job pattern endpoints (v1)
 │   └── V2/
-│       └── ApplicationsController.cs   - Returns enriched data with calculated fields (v2)
+│       └── ApplicationsController.cs   - Enriched data, status, count, and stats endpoints (v2)
+├── Filters/
+│   ├── BasicAuthOperationFilter.cs     - Swagger padlock for Basic-protected endpoints
+│   └── BearerAuthOperationFilter.cs    - Swagger padlock for Bearer-protected endpoints
 ├── Models/
+│   ├── Auth/
+│   │   ├── LoginRequest.cs             - Username/password input
+│   │   ├── TokenResponse.cs            - JWT response wrapper
+│   │   ├── OAuthTokenRequest.cs        - client_id, client_secret, grant_type, scope
+│   │   └── OAuthTokenResponse.cs       - access_token, token_type, expires_in, scope
 │   ├── V1/
 │   │   └── ApplicationResponse.cs      - Raw CSV field mapping
-│   ├── V2/
-│   │   └── ApplicationResponse.cs      - Adds DaysInPipeline, IsFollowUpToday, StatusCategory
-│   └── JobRecord.cs                    - Job state model and JobStatus enum
+│   └── V2/
+│       ├── ApplicationResponse.cs      - Adds DaysInPipeline, IsFollowUpToday, StatusCategory
+│       └── ApplicationStatsResponse.cs - Pipeline aggregate statistics
 ├── Services/
 │   ├── ICsvReaderService.cs            - CSV reader interface
 │   ├── CsvReaderService.cs             - CsvHelper implementation
+│   ├── ITokenService.cs                - Token generation interface
+│   ├── TokenService.cs                 - JWT generation for users and OAuth clients
+│   ├── IOAuthClientService.cs          - Client credential validation interface
+│   ├── OAuthClientService.cs           - Validates client_id/secret against config
 │   └── JobStore.cs                     - Thread-safe in-memory job store
 ├── TestData/
 │   └── applications.csv                - Live job search pipeline data
 └── Program.cs                          - DI registration and middleware
+
 LampLightLabs.JobSearch.Api.Tests/
-├── CsvReaderServiceTests.cs            - 4 unit tests
-└── JobStoreTests.cs                    - 5 unit tests
+├── AuthenticationTests.cs              - 13 tests: TokenService, AuthController, JWT integration
+├── ApiKeyAuthTests.cs                  - API key auth tests
+├── BasicAuthTests.cs                   - Basic auth tests
+├── OAuthTests.cs                       - 14 tests: GenerateClientToken, OAuthClientService, OAuthController, stats integration
+├── CsvReaderServiceTests.cs            - CSV parsing tests
+└── JobStoreTests.cs                    - JobStore concurrency and state tests
+
+Total: 51 tests passing
+```
 
 ---
 
@@ -108,9 +188,10 @@ LampLightLabs.JobSearch.Api.Tests/
 - ASP.NET Core Web API
 - Asp.Versioning.Mvc 8.1.0
 - CsvHelper
+- Microsoft.AspNetCore.Authentication.JwtBearer 8.0.22
 - xUnit v3
 - Moq
-- Swagger / Swashbuckle
+- Swagger / Swashbuckle 6.9.0
 
 ---
 
@@ -142,9 +223,15 @@ LampLightLabs.JobSearch.Api.Tests/
 
 **Calculated fields in V2, not V1** - V1 returns raw data. V2 applies business logic server-side. This is the correct versioning pattern - rather than modifying an existing contract, a new version introduces the enriched shape while V1 remains stable and unchanged.
 
+**OAuth token endpoint outside versioning** - `POST /oauth/token` lives at the root, not under `/api/v1/` or `/api/v2/`. Auth infrastructure is not a versioned resource. Moving a token endpoint under a new version would break all existing clients - there is no good reason to version it.
+
+**Client Credentials over Authorization Code for the first OAuth exercise** - Client Credentials is the most common OAuth flow in backend contract work. No browser, no redirect, no user session - a service authenticates and gets a token. Authorization Code is the right next step for user-delegated access scenarios.
+
+**BearerAuthOperationFilter mirrors BasicAuthOperationFilter** - Swagger doesn't automatically connect `[Authorize]` to a security scheme in the UI. The operation filters inspect method attributes at doc generation time and wire the correct padlock to the correct endpoints. Adding a new auth scheme means adding a new filter - the pattern is consistent and self-contained.
+
 **CsvHelper over manual parsing** - The job search CSV contains multi-line quoted fields in the Notes column. A hand-rolled `ReadLine()` parser breaks on these. CsvHelper handles RFC 4180 compliant CSV correctly out of the box.
 
-**Interface-based DI** - `CsvReaderService` is registered against `ICsvReaderService`. This decouples the controller from the implementation - swapping in a Google Sheets reader or a mock for testing requires no controller changes.
+**Interface-based DI** - All services are registered against interfaces. This decouples controllers from implementations and makes unit testing with Moq clean and straightforward.
 
 **ConcurrentDictionary for JobStore** - Background jobs run on a separate thread. `ConcurrentDictionary` ensures thread-safe reads and writes without manual locking.
 
