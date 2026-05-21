@@ -123,5 +123,65 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
 
             return "Unknown";
         }
+
+        /// <summary>
+        /// Returns aggregate statistics for the job application pipeline.
+        /// Requires OAuth 2.0 Client Credentials bearer token (machine-to-machine).
+        /// </summary>
+        [Authorize]
+        [HttpGet("stats")]
+        public IActionResult GetStats()
+        {
+            var filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TestData", "applications.csv");
+            if (!System.IO.File.Exists(filePath))
+                return NotFound($"File not found: {filePath}");
+
+            var rows = _csv.ReadCsv(filePath);
+            var today = DateOnly.FromDateTime(DateTime.Today);
+
+            var applications = rows.Select(row =>
+            {
+                string Get(string key) => row.ContainsKey(key) ? row[key] : "";
+                DateOnly.TryParse(Get("Date applied"), out var dateApplied);
+                DateOnly.TryParse(Get("Followup On"), out var followupOn);
+                return new ApplicationResponse
+                {
+                    Platform = Get("Platform"),
+                    DateApplied = Get("Date applied"),
+                    Status = Get("Status"),
+                    DaysInPipeline = dateApplied != default
+                        ? today.DayNumber - dateApplied.DayNumber
+                        : 0,
+                    IsFollowUpToday = followupOn == today,
+                    StatusCategory = CategorizeStatus(Get("Status"))
+                };
+            }).ToList();
+
+            var validDates = applications
+                .Where(a => DateOnly.TryParse(a.DateApplied, out _))
+                .Select(a => a.DateApplied)
+                .OrderBy(d => d)
+                .ToList();
+
+            var stats = new ApplicationStatsResponse
+            {
+                TotalApplications = applications.Count,
+                ByStatusCategory = applications
+                    .GroupBy(a => a.StatusCategory)
+                    .ToDictionary(g => g.Key, g => g.Count()),
+                ByPlatform = applications
+                    .Where(a => !string.IsNullOrWhiteSpace(a.Platform))
+                    .GroupBy(a => a.Platform)
+                    .ToDictionary(g => g.Key, g => g.Count()),
+                AverageDaysInPipeline = applications.Any()
+                    ? Math.Round(applications.Average(a => a.DaysInPipeline), 1)
+                    : 0,
+                FollowUpsDueToday = applications.Count(a => a.IsFollowUpToday),
+                EarliestApplication = validDates.FirstOrDefault() ?? string.Empty,
+                MostRecentApplication = validDates.LastOrDefault() ?? string.Empty
+            };
+
+            return Ok(stats);
+        }
     }
 }

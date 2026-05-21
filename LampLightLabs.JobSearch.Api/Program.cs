@@ -78,12 +78,15 @@ builder.Services.AddSwaggerGen(options =>
     });
 
     options.OperationFilter<BasicAuthOperationFilter>();
+    options.OperationFilter<BearerAuthOperationFilter>();
+
 });
 
 // Services
 builder.Services.AddScoped<ICsvReaderService, CsvReaderService>();
 builder.Services.AddSingleton<JobStore>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
 
 var app = builder.Build();
 
