@@ -4,6 +4,10 @@ using LampLightLabs.JobSearch.Api.Models.V2;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 namespace LampLightLabs.JobSearch.Api.Controllers.V2
 {
@@ -19,14 +23,17 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
     public class ApplicationsController : ControllerBase
     {
         private readonly ICsvReaderService _csv;
+        private readonly IIdempotencyService _idempotency;
 
         /// <summary>
-        /// Constructor that accepts the CSV reader service via dependency injection.
+        /// Constructor that accepts the CSV reader service and idempotency service via dependency injection.
         /// </summary>
         /// <param name="csv">The CSV reader service.</param>
-        public ApplicationsController(ICsvReaderService csv)
+        /// <param name="idempotency">The idempotency service.</param>
+        public ApplicationsController(ICsvReaderService csv, IIdempotencyService idempotency)
         {
             _csv = csv;
+            _idempotency = idempotency;
         }
 
         /// <summary>
@@ -108,6 +115,79 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
             var rows = _csv.ReadCsv(filePath);
             return Ok(new { Count = rows.Count() });
         }
+        /// <summary>
+        /// Creates a new job application record.
+        /// Requires JWT bearer token authentication.
+        /// Requires an Idempotency-Key header to prevent duplicate submissions.
+        ///
+        /// - New key: creates the record and caches the response. Returns 201.
+        /// - Same key, same body: replays the cached 201. No duplicate is created.
+        /// - Same key, different body: returns 422. Key reuse on a different payload is a bug.
+        /// - Missing key: returns 400.
+        /// </summary>
+        [Authorize]
+        [HttpPost]
+        public IActionResult Post(
+            [FromBody] ApplicationRequest request,
+            [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey)
+        {
+            if (string.IsNullOrWhiteSpace(idempotencyKey))
+                return BadRequest(new { Error = "Idempotency-Key header is required." });
+
+            // Prefer the user name claim (user JWT); fall back to client_id (client credentials JWT).
+            var clientId = User.Identity?.Name
+                ?? User.FindFirstValue("client_id")
+                ?? "anonymous";
+
+            var requestHash = ComputeHash(request);
+
+            if (_idempotency.TryGetCachedResponse(clientId, idempotencyKey, out var cached))
+            {
+                if (cached!.RequestHash != requestHash)
+                    return UnprocessableEntity(new { Error = "Idempotency-Key reused with a different request body." });
+
+                // Replay the original response — no second record created.
+                return StatusCode(cached.StatusCode, cached.Response);
+            }
+
+            // First time we have seen this key — build and store the record.
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            DateOnly.TryParse(request.DateApplied, out var dateApplied);
+
+            var created = new ApplicationResponse
+            {
+                Company = request.Company,
+                Role = request.Role,
+                Platform = request.Platform,
+                ContactName = request.ContactName,
+                DateApplied = request.DateApplied,
+                RateBudget = request.RateBudget,
+                Status = "Applied",
+                Notes = request.Notes,
+                LinkToJobPost = request.LinkToJobPost,
+                DaysInPipeline = dateApplied != default
+                    ? today.DayNumber - dateApplied.DayNumber
+                    : 0,
+                IsFollowUpToday = false,
+                StatusCategory = "Active"
+            };
+
+            _idempotency.StoreResponse(clientId, idempotencyKey, requestHash, 201, created);
+
+            return StatusCode(201, created);
+        }
+
+        /// <summary>
+        /// Computes a SHA-256 hash of the serialized request body.
+        /// Used to detect key reuse on a different payload.
+        /// </summary>
+        private static string ComputeHash(ApplicationRequest request)
+        {
+            var json = JsonSerializer.Serialize(request);
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+            return Convert.ToHexString(bytes);
+        }
+
         private static string CategorizeStatus(string status)
         {
             var s = status.ToLower();
