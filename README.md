@@ -6,7 +6,7 @@ A personal ASP.NET Core Web API project built by **Michael Sargent** to dust off
 
 ## What This Project Does
 
-This project serves three purposes:
+This project serves five purposes:
 
 **1. Job Search Pipeline Tracker**
 The `ApplicationsController` reads a CSV file containing job applications and their current pipeline states, exposing that data via a REST endpoint. It uses CsvHelper to correctly handle quoted multi-line fields - a real-world parsing challenge solved during development.
@@ -16,6 +16,12 @@ The `JobsController` demonstrates a production-relevant API pattern: accepting a
 
 **3. Authentication Showcase**
 Each endpoint in the project demonstrates a different authentication scheme: JWT Bearer, API Key, Basic Auth, and OAuth 2.0 Client Credentials. This mirrors real-world backend APIs where different consumers (users, services, integrations) require different auth patterns on different endpoints.
+
+**4. Idempotency (Exercise)**
+`POST /api/v2/applications` demonstrates idempotent write operations using a caller-supplied `Idempotency-Key` header and SHA-256 request fingerprinting. The server caches the response on first call and replays it on retry - no duplicate record is created. Key reuse on a different payload returns 422. This pattern is critical in payment processing, compliance workflows, and any distributed system where a request may fire more than once.
+
+**5. Characterization Testing (Exercise)**
+`StatusCategorizerService` was extracted from a private controller method and covered with characterization tests before any refactoring was attempted. Following Michael Feathers' approach from "Working Effectively with Legacy Code" - freeze what the code actually does, not what it should do, then refactor safely inside that safety net.
 
 ---
 
@@ -37,6 +43,7 @@ All endpoints are versioned using URL segment versioning (`/api/v{version}/...`)
 | GET | `/api/v2/applications/status` | v2 | API Key | Returns lightweight pipeline status confirming the API is operational |
 | GET | `/api/v2/applications/count` | v2 | Basic Auth | Returns the total count of applications in the pipeline CSV |
 | GET | `/api/v2/applications/stats` | v2 | JWT Bearer (OAuth) | Returns aggregate pipeline statistics: totals, breakdowns, averages |
+| POST | `/api/v2/applications` | v2 | JWT Bearer | Creates a new application record. Requires `Idempotency-Key` header. Replays cached response on retry. Returns 422 if key is reused with a different body. |
 
 ### Jobs
 | Method | Route | Version | Auth | Description |
@@ -142,7 +149,7 @@ LampLightLabs.JobSearch.Api/
 │   │   ├── AuthController.cs           - POST /api/v1/auth/token (JWT issuance)
 │   │   └── JobsController.cs           - Async job pattern endpoints (v1)
 │   └── V2/
-│       └── ApplicationsController.cs   - Enriched data, status, count, and stats endpoints (v2)
+│       └── ApplicationsController.cs   - Enriched data, status, count, stats, and idempotent POST endpoints (v2)
 ├── Filters/
 │   ├── BasicAuthOperationFilter.cs     - Swagger padlock for Basic-protected endpoints
 │   └── BearerAuthOperationFilter.cs    - Swagger padlock for Bearer-protected endpoints
@@ -155,6 +162,7 @@ LampLightLabs.JobSearch.Api/
 │   ├── V1/
 │   │   └── ApplicationResponse.cs      - Raw CSV field mapping
 │   └── V2/
+│       ├── ApplicationRequest.cs       - POST request body for idempotent application creation
 │       ├── ApplicationResponse.cs      - Adds DaysInPipeline, IsFollowUpToday, StatusCategory
 │       └── ApplicationStatsResponse.cs - Pipeline aggregate statistics
 ├── Services/
@@ -164,6 +172,11 @@ LampLightLabs.JobSearch.Api/
 │   ├── TokenService.cs                 - JWT generation for users and OAuth clients
 │   ├── IOAuthClientService.cs          - Client credential validation interface
 │   ├── OAuthClientService.cs           - Validates client_id/secret against config
+│   ├── IIdempotencyService.cs          - Idempotency store interface
+│   ├── IdempotencyService.cs           - ConcurrentDictionary-backed idempotency store (singleton)
+│   ├── IdempotencyCacheEntry.cs        - Cache entry: request hash, status code, response, timestamp
+│   ├── IStatusCategorizerService.cs    - Status categorization interface
+│   ├── StatusCategorizerService.cs     - Extracted from controller; covered by characterization tests
 │   └── JobStore.cs                     - Thread-safe in-memory job store
 ├── TestData/
 │   └── applications.csv                - Live job search pipeline data
@@ -175,9 +188,11 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── BasicAuthTests.cs                   - Basic auth tests
 ├── OAuthTests.cs                       - 14 tests: GenerateClientToken, OAuthClientService, OAuthController, stats integration
 ├── CsvReaderServiceTests.cs            - CSV parsing tests
-└── JobStoreTests.cs                    - JobStore concurrency and state tests
+├── JobStoreTests.cs                    - JobStore concurrency and state tests
+├── IdempotencyTests.cs                 - 4 integration tests: new key, replay, missing key, key reuse conflict
+└── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
 
-Total: 51 tests passing
+Total: 68 tests passing
 ```
 
 ---
@@ -233,7 +248,13 @@ Total: 51 tests passing
 
 **Interface-based DI** - All services are registered against interfaces. This decouples controllers from implementations and makes unit testing with Moq clean and straightforward.
 
-**ConcurrentDictionary for JobStore** - Background jobs run on a separate thread. `ConcurrentDictionary` ensures thread-safe reads and writes without manual locking.
+**ConcurrentDictionary for JobStore and IdempotencyService** - Both run in singleton scope and handle concurrent requests. `ConcurrentDictionary` ensures thread-safe reads and writes without manual locking. `IdempotencyService` uses a composite key of `clientId:idempotencyKey` so two clients sending the same GUID do not collide.
+
+**Idempotency-Key scoped to client identity** - The idempotency store keys each entry to the authenticated client identity plus the caller-supplied key. A user JWT resolves to the `name` claim. A client credentials JWT resolves to the `client_id` claim. This prevents one client's key from shadowing another client's identical key.
+
+**SHA-256 request fingerprinting** - On first call the server hashes the serialized request body and stores it alongside the cached response. On retry, if the key matches but the hash does not, the server returns 422. This catches a client who reuses a key on a different payload - a bug that would otherwise be silently mishandled.
+
+**Characterization tests before refactoring** - `StatusCategorizerService` was a private static method on `ApplicationsController` before extraction. Characterization tests were written against the extracted service before any logic was changed. One test (`Applied_ReturnsUnknown`) explicitly documents a gap in the current logic and freezes it as-is. The fix belongs in a subsequent PR after the safety net is in place - not during the characterization pass.
 
 ---
 
