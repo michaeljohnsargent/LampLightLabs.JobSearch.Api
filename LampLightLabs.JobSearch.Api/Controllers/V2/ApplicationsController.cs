@@ -24,16 +24,19 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
     {
         private readonly ICsvReaderService _csv;
         private readonly IIdempotencyService _idempotency;
+        private readonly IStatusCategorizerService _statusCategorizer;
 
         /// <summary>
-        /// Constructor that accepts the CSV reader service and idempotency service via dependency injection.
+        /// Constructor that accepts services via dependency injection.
         /// </summary>
         /// <param name="csv">The CSV reader service.</param>
         /// <param name="idempotency">The idempotency service.</param>
-        public ApplicationsController(ICsvReaderService csv, IIdempotencyService idempotency)
+        /// <param name="statusCategorizer">The status categorizer service.</param>
+        public ApplicationsController(ICsvReaderService csv, IIdempotencyService idempotency, IStatusCategorizerService statusCategorizer)
         {
             _csv = csv;
             _idempotency = idempotency;
+            _statusCategorizer = statusCategorizer;
         }
 
         /// <summary>
@@ -76,7 +79,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
                         ? today.DayNumber - dateApplied.DayNumber
                         : 0,
                     IsFollowUpToday = followupOn == today,
-                    StatusCategory = CategorizeStatus(Get("Status"))
+                    StatusCategory = _statusCategorizer.Categorize(Get("Status"))
                 };
             }).ToList();
 
@@ -188,22 +191,6 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
             return Convert.ToHexString(bytes);
         }
 
-        private static string CategorizeStatus(string status)
-        {
-            var s = status.ToLower();
-
-            if (s.Contains("closed") || s.Contains("declined") || s.Contains("rejected"))
-                return "Closed";
-
-            if (s.Contains("hold") || s.Contains("waiting") || s.Contains("pending"))
-                return "OnHold";
-
-            if (s.Contains("warm") || s.Contains("active") || s.Contains("submitted") || s.Contains("interview"))
-                return "Active";
-
-            return "Unknown";
-        }
-
         /// <summary>
         /// Returns aggregate statistics for the job application pipeline.
         /// Requires OAuth 2.0 Client Credentials bearer token (machine-to-machine).
@@ -233,7 +220,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
                         ? today.DayNumber - dateApplied.DayNumber
                         : 0,
                     IsFollowUpToday = followupOn == today,
-                    StatusCategory = CategorizeStatus(Get("Status"))
+                    StatusCategory = _statusCategorizer.Categorize(Get("Status"))
                 };
             }).ToList();
 

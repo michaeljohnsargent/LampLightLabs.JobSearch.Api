@@ -88,6 +88,7 @@ builder.Services.AddSingleton<JobStore>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
 builder.Services.AddSingleton<IIdempotencyService, IdempotencyService>();
+builder.Services.AddScoped<IStatusCategorizerService, StatusCategorizerService>();
 
 var app = builder.Build();
 
