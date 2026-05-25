@@ -87,6 +87,7 @@ builder.Services.AddScoped<ICsvReaderService, CsvReaderService>();
 builder.Services.AddSingleton<JobStore>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
+builder.Services.AddSingleton<IIdempotencyService, IdempotencyService>();
 
 var app = builder.Build();
 
