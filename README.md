@@ -23,6 +23,9 @@ Each endpoint in the project demonstrates a different authentication scheme: JWT
 **5. Characterization Testing (Exercise)**
 `StatusCategorizerService` was extracted from a private controller method and covered with characterization tests before any refactoring was attempted. Following Michael Feathers' approach from "Working Effectively with Legacy Code" - freeze what the code actually does, not what it should do, then refactor safely inside that safety net.
 
+**6. Threading Concepts (Exercise)**
+Two tests in `RaceConditionDemoTests` demonstrate race condition behavior and its fix. The broken version spins up two threads incrementing a shared counter without synchronization - at 1 million iterations the result is reliably short of 2 million, proving the lost update. The fixed version wraps the increment in a `lock` block with a shared lock object and produces exactly 2 million every time. `ProcessApplicationsAsync` in `JobsController` also demonstrates `CancellationToken` wired into a long-running async operation - the delay is cancellation-aware and the token is checked before CSV processing begins so the operation exits cleanly at a safe boundary.
+
 ---
 
 ## Endpoints
@@ -121,7 +124,7 @@ This mirrors a real-world versioning scenario - V1 consumers continue working un
 Client                          Server
 |                               |
 |-- POST /api/v1/jobs/start --->|  Returns 202 Accepted + jobId immediately
-|<-- { jobId, status: Queued } -|  Background work starts
+|<-- { jobId, status: Queued } -|  Background work starts (CancellationToken wired in)
 |                               |
 |-- GET /api/v1/jobs/{id}/status|  Poll #1
 |<-- { status: Processing } ----|
@@ -131,6 +134,8 @@ Client                          Server
 |      result: "Processed 29    |
 |      applications" }          |
 ```
+
+The background task accepts a `CancellationToken`. The 3-second delay is cancellation-aware (`Task.Delay(3000, cancellationToken)`), and the token is checked again before CSV processing begins. The operation exits cleanly at a safe boundary rather than being interrupted mid-work.
 
 ---
 
@@ -190,9 +195,10 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── CsvReaderServiceTests.cs            - CSV parsing tests
 ├── JobStoreTests.cs                    - JobStore concurrency and state tests
 ├── IdempotencyTests.cs                 - 4 integration tests: new key, replay, missing key, key reuse conflict
-└── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
+├── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
+└── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken), race condition with lock (fixed)
 
-Total: 68 tests passing
+Total: 70 tests passing
 ```
 
 ---
