@@ -33,15 +33,19 @@ namespace LampLightLabs.JobSearch.Api.Controllers
         // POST api/jobs/start
         /// <summary>
         /// Starts a new job and initiates background processing of applications.
+        /// Creates a CancellationTokenSource and passes the token into the background
+        /// task so processing can be cancelled cleanly if needed.
         /// </summary>
         /// <returns>An Accepted response containing the job ID and status.</returns>
         [HttpPost("start")]
         public IActionResult StartJob()
         {
             var job = _jobStore.CreateJob();
+            var cts = new CancellationTokenSource();
+            CancellationToken token = cts.Token;
 
             // Kick off background work without awaiting it
-            _ = Task.Run(() => ProcessApplicationsAsync(job.JobId));
+            var _ = Task.Run(() => ProcessApplicationsAsync(job.JobId, token));
 
             return Accepted(new { jobId = job.JobId, status = job.Status.ToString() });
         }
@@ -71,22 +75,28 @@ namespace LampLightLabs.JobSearch.Api.Controllers
         }
 
         /// <summary>
-        /// Reads and processes applications from a CSV file, updating the job status 
-        /// accordingly. This method simulates long-running work by introducing a delay 
-        /// and then reading a CSV file to count the number of applications processed. 
-        /// It updates the job record in the in-memory store with the results or any 
-        /// errors encountered during processing.
+        /// Reads and processes applications from a CSV file, updating the job status
+        /// accordingly. This method simulates long-running work by introducing a delay
+        /// and then reading a CSV file to count the number of applications processed.
+        /// It updates the job record in the in-memory store with the results or any
+        /// errors encountered during processing. The delay is cancellation-aware, and
+        /// cancellation is checked before CSV processing begins so the operation exits
+        /// cleanly at a safe boundary.
         /// </summary>
         /// <param name="jobId">The ID of the job to process applications for.</param>
+        /// <param name="cancellationToken">Token used to cancel the operation cleanly
+        /// before or during processing.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        private async Task ProcessApplicationsAsync(string jobId)
+        private async Task ProcessApplicationsAsync(string jobId, CancellationToken cancellationToken)
         {
             _jobStore.UpdateJob(jobId, j => j.Status = JobStatus.Processing);
 
             try
             {
                 // Simulate real work - read and process the CSV
-                await Task.Delay(3000); // 3 second delay to simulate long-running work
+                await Task.Delay(3000, cancellationToken); // 3 second delay to simulate long-running work
+
+                cancellationToken.ThrowIfCancellationRequested();
 
                 var filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TestData", "applications.csv");
                 var rows = _csv.ReadCsv(filePath).ToList();
