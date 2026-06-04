@@ -171,8 +171,9 @@ LampLightLabs.JobSearch.Api/
 │       ├── ApplicationResponse.cs      - Adds DaysInPipeline, IsFollowUpToday, StatusCategory
 │       └── ApplicationStatsResponse.cs - Pipeline aggregate statistics
 ├── Services/
-│   ├── ICsvReaderService.cs            - CSV reader interface
-│   ├── CsvReaderService.cs             - CsvHelper implementation
+│   ├── ICsvReaderService.cs            - Reader service interface (Strategy Pattern contract)
+│   ├── CsvReaderService.cs             - CsvHelper implementation (default production reader)
+│   ├── JsonReaderService.cs            - JSON implementation (Strategy Pattern alternative)
 │   ├── ITokenService.cs                - Token generation interface
 │   ├── TokenService.cs                 - JWT generation for users and OAuth clients
 │   ├── IOAuthClientService.cs          - Client credential validation interface
@@ -192,13 +193,13 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── ApiKeyAuthTests.cs                  - API key auth tests
 ├── BasicAuthTests.cs                   - Basic auth tests
 ├── OAuthTests.cs                       - 14 tests: GenerateClientToken, OAuthClientService, OAuthController, stats integration
-├── CsvReaderServiceTests.cs            - CSV parsing tests
+├── CsvReaderServiceTests.cs            - CSV parsing tests + 5 JsonReaderService tests including Strategy Pattern proof
 ├── JobStoreTests.cs                    - JobStore concurrency and state tests
 ├── IdempotencyTests.cs                 - 4 integration tests: new key, replay, missing key, key reuse conflict
 ├── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
 └── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken), race condition with lock (fixed)
 
-Total: 70 tests passing
+Total: 75 tests passing
 ```
 
 ---
@@ -251,6 +252,8 @@ Total: 70 tests passing
 **BearerAuthOperationFilter mirrors BasicAuthOperationFilter** - Swagger doesn't automatically connect `[Authorize]` to a security scheme in the UI. The operation filters inspect method attributes at doc generation time and wire the correct padlock to the correct endpoints. Adding a new auth scheme means adding a new filter - the pattern is consistent and self-contained.
 
 **CsvHelper over manual parsing** - The job search CSV contains multi-line quoted fields in the Notes column. A hand-rolled `ReadLine()` parser breaks on these. CsvHelper handles RFC 4180 compliant CSV correctly out of the box.
+
+**Strategy Pattern (ICsvReaderService)** - `ICsvReaderService` defines the contract for reading structured data files. `CsvReaderService` and `JsonReaderService` are interchangeable implementations. Swapping one for the other requires changing a single line in `Program.cs` - the controller, job processor, and all callers remain untouched. This is the Strategy Pattern: same interface, swappable behavior, caller never knows the difference. A proof test in `CsvReaderServiceTests` verifies both implementations return identical results from the same data in different formats.
 
 **Interface-based DI** - All services are registered against interfaces. This decouples controllers from implementations and makes unit testing with Moq clean and straightforward.
 
