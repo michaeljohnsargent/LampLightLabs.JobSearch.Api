@@ -4,31 +4,19 @@ using System.Globalization;
 namespace LampLightLabs.JobSearch.Api.Services
 {
     /// <summary>
-    /// Reads CSV files and returns an enumerable of dictionaries representing each row.
-    /// </summary>
-    public interface ICsvReaderService
-    {
-        /// <summary>
-        /// Reads a CSV file from the specified relative path and returns an enumerable of dictionaries, where each dictionary
-        /// represents a row in the CSV file, with column names as keys and cell values as values.
-        /// </summary>
-        /// <param name="relativePath">The relative path to the CSV file.</param>
-        /// <returns>An enumerable of dictionaries representing each row in the CSV file.</returns>
-        IEnumerable<IDictionary<string, string>> ReadCsv(string relativePath);
-    }
-
-    /// <summary>
-    /// Reader service that uses CsvHelper to read CSV files. It reads the header row to 
-    /// determine column names and then yields dictionaries for each subsequent row, 
-    /// mapping column names to their respective values.
+    /// Reads CSV files and returns each row as a dictionary of column name to value.
+    /// Uses CsvHelper to parse the header row and map subsequent rows accordingly.
+    /// Implements <see cref="ICsvReaderService"/> as the default production reader.
     /// </summary>
     public class CsvReaderService : ICsvReaderService
     {
-        // We inject IWebHostEnvironment in case we need to resolve file paths relative to the web root or content root.
+        // IWebHostEnvironment is injected for potential future use resolving paths
+        // relative to the web root or content root.
         private readonly IWebHostEnvironment _env;
 
         /// <summary>
-        /// Reader service constructor that accepts the web hosting environment for potential file path resolution.
+        /// Initializes a new instance of <see cref="CsvReaderService"/> with the
+        /// web hosting environment for file path resolution.
         /// </summary>
         /// <param name="env">The web hosting environment.</param>
         public CsvReaderService(IWebHostEnvironment env)
@@ -37,11 +25,11 @@ namespace LampLightLabs.JobSearch.Api.Services
         }
 
         /// <summary>
-        /// Reads a CSV file from the specified path and returns an enumerable of dictionaries, where each dictionary
-        /// represents a row in the CSV file, with column names as keys and cell values as values.
+        /// Reads a CSV file from the specified path and yields each row as a dictionary,
+        /// mapping column headers to their respective cell values.
         /// </summary>
         /// <param name="filePath">The path to the CSV file.</param>
-        /// <returns>An enumerable of dictionaries representing each row in the CSV file.</returns>
+        /// <returns>An enumerable of dictionaries representing each data row.</returns>
         public IEnumerable<IDictionary<string, string>> ReadCsv(string filePath)
         {
             using var sr = new StreamReader(filePath);
