@@ -84,6 +84,9 @@ builder.Services.AddSwaggerGen(options =>
 
 // Services
 builder.Services.AddScoped<ICsvReaderService, CsvReaderService>();
+// For testing purposes, you can swap out the real CSV reader with a JSON reader that reads from a test file.
+//builder.Services.AddScoped<ICsvReaderService, JsonReaderService>();
+
 builder.Services.AddSingleton<JobStore>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
