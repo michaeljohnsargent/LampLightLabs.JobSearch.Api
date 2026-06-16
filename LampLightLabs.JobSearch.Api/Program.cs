@@ -93,6 +93,7 @@ builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
 builder.Services.AddSingleton<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IStatusCategorizerService, StatusCategorizerService>();
 builder.Services.AddScoped<IClaudeChatService, ClaudeChatService>();
+builder.Services.AddScoped<ISemanticKernelChatService, SemanticKernelChatService>();
 
 var app = builder.Build();
 
