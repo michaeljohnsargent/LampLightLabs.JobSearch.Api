@@ -29,6 +29,9 @@ Two tests in `RaceConditionDemoTests` demonstrate race condition behavior and it
 **7. AI Integration (Exercise)**
 `POST /api/ai/chat` accepts a JSON body with a `prompt` field and forwards it to the Anthropic Claude API via the official Anthropic .NET SDK, returning Claude's text response. `IClaudeChatService` wraps the SDK call behind an interface, consistent with the interface-based DI pattern used throughout the project, which keeps the controller and its tests free of any direct dependency on the SDK. The API key is configured under `Anthropic:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
 
+**8. Semantic Kernel Integration (Exercise)**
+`POST /api/sk/chat` accepts a JSON body with a `prompt` field and forwards it to an OpenAI chat completion model through Microsoft Semantic Kernel's OpenAI connector, returning the model's text response. `ISemanticKernelChatService` builds and wraps the Semantic Kernel `Kernel` behind an interface - the same pattern used for `IClaudeChatService` - so the controller and its tests have no direct dependency on Semantic Kernel or OpenAI. This mirrors a real-world scenario where an application swaps or runs multiple LLM orchestration frameworks side by side. The API key is configured under `OpenAI:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
+
 ---
 
 ## Endpoints
@@ -61,6 +64,7 @@ All endpoints are versioned using URL segment versioning (`/api/v{version}/...`)
 | Method | Route | Auth | Description |
 |---|---|---|---|
 | POST | `/api/ai/chat` | None | Accepts `{ "prompt": "..." }` and returns Claude's response via the Anthropic .NET SDK |
+| POST | `/api/sk/chat` | None | Accepts `{ "prompt": "..." }` and returns an OpenAI model's response via Microsoft Semantic Kernel |
 
 ---
 
@@ -158,6 +162,7 @@ LampLightLabs.JobSearch.Api/
 ├── Controllers/
 │   ├── AiController.cs                 - POST /api/ai/chat (outside versioning)
 │   ├── OAuthController.cs              - POST /oauth/token (outside versioning)
+│   ├── SemanticKernelController.cs     - POST /api/sk/chat (outside versioning)
 │   ├── V1/
 │   │   ├── ApplicationsController.cs   - Returns raw CSV data (v1)
 │   │   ├── AuthController.cs           - POST /api/v1/auth/token (JWT issuance)
@@ -176,6 +181,9 @@ LampLightLabs.JobSearch.Api/
 │   │   ├── TokenResponse.cs            - JWT response wrapper
 │   │   ├── OAuthTokenRequest.cs        - client_id, client_secret, grant_type, scope
 │   │   └── OAuthTokenResponse.cs       - access_token, token_type, expires_in, scope
+│   ├── Sk/
+│   │   ├── SkChatRequest.cs            - Request body for POST /api/sk/chat (Prompt)
+│   │   └── SkChatResponse.cs           - Response body for POST /api/sk/chat (Response)
 │   ├── V1/
 │   │   └── ApplicationResponse.cs      - Raw CSV field mapping
 │   └── V2/
@@ -185,6 +193,8 @@ LampLightLabs.JobSearch.Api/
 ├── Services/
 │   ├── IClaudeChatService.cs           - Claude chat interface
 │   ├── ClaudeChatService.cs            - Anthropic .NET SDK implementation; sends prompts to Claude
+│   ├── ISemanticKernelChatService.cs   - Semantic Kernel chat interface
+│   ├── SemanticKernelChatService.cs    - Builds a Semantic Kernel Kernel with the OpenAI connector; sends prompts
 │   ├── ICsvReaderService.cs            - Reader service interface (Strategy Pattern contract)
 │   ├── CsvReaderService.cs             - CsvHelper implementation (default production reader)
 │   ├── JsonReaderService.cs            - JSON implementation (Strategy Pattern alternative)
@@ -212,9 +222,10 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── JobStoreTests.cs                    - JobStore concurrency and state tests
 ├── IdempotencyTests.cs                 - 4 integration tests: new key, replay, missing key, key reuse conflict
 ├── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
-└── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken), race condition with lock (fixed)
+├── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken), race condition with lock (fixed)
+└── SemanticKernelControllerTests.cs    - 4 tests: prompt validation, response shaping, service passthrough (ISemanticKernelChatService mocked)
 
-Total: 79 tests passing
+Total: 83 tests passing
 ```
 
 ---
@@ -227,6 +238,7 @@ Total: 79 tests passing
 - CsvHelper
 - Microsoft.AspNetCore.Authentication.JwtBearer 8.0.22
 - Anthropic .NET SDK (Claude API integration)
+- Microsoft Semantic Kernel (OpenAI connector)
 - xUnit v3
 - Moq
 - Swagger / Swashbuckle 6.9.0
@@ -248,12 +260,13 @@ Total: 79 tests passing
 6. Use the dropdown in the top right to switch between v1 and v2 definitions
 
 **Optional - AI Integration:**
-To call `POST /api/ai/chat`, set a real Anthropic API key via user secrets (run from the `LampLightLabs.JobSearch.Api` directory):
+To call `POST /api/ai/chat` or `POST /api/sk/chat`, set real API keys via user secrets (run from the `LampLightLabs.JobSearch.Api` directory):
 ```
 dotnet user-secrets init
 dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-..."
+dotnet user-secrets set "OpenAI:ApiKey" "sk-..."
 ```
-The placeholder value in `appsettings.json` is never used for live requests - it exists only to document the expected config shape.
+The placeholder values in `appsettings.json` are never used for live requests - they exist only to document the expected config shape.
 
 **Running Tests:**
 - Open Test Explorer (`Ctrl+E, T`)
