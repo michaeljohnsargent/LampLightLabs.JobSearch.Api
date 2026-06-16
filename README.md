@@ -26,6 +26,9 @@ Each endpoint in the project demonstrates a different authentication scheme: JWT
 **6. Threading Concepts (Exercise)**
 Two tests in `RaceConditionDemoTests` demonstrate race condition behavior and its fix. The broken version spins up two threads incrementing a shared counter without synchronization - at 1 million iterations the result is reliably short of 2 million, proving the lost update. The fixed version wraps the increment in a `lock` block with a shared lock object and produces exactly 2 million every time. `ProcessApplicationsAsync` in `JobsController` also demonstrates `CancellationToken` wired into a long-running async operation - the delay is cancellation-aware and the token is checked before CSV processing begins so the operation exits cleanly at a safe boundary.
 
+**7. AI Integration (Exercise)**
+`POST /api/ai/chat` accepts a JSON body with a `prompt` field and forwards it to the Anthropic Claude API via the official Anthropic .NET SDK, returning Claude's text response. `IClaudeChatService` wraps the SDK call behind an interface, consistent with the interface-based DI pattern used throughout the project, which keeps the controller and its tests free of any direct dependency on the SDK. The API key is configured under `Anthropic:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
+
 ---
 
 ## Endpoints
@@ -53,6 +56,11 @@ All endpoints are versioned using URL segment versioning (`/api/v{version}/...`)
 |---|---|---|---|---|
 | POST | `/api/v1/jobs/start` | v1 | None | Starts a background job, returns job ID immediately |
 | GET | `/api/v1/jobs/{jobId}/status` | v1 | None | Polls the status of a running or completed job |
+
+### AI
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| POST | `/api/ai/chat` | None | Accepts `{ "prompt": "..." }` and returns Claude's response via the Anthropic .NET SDK |
 
 ---
 
@@ -148,6 +156,7 @@ LampLightLabs.JobSearch.Api/
 ├── Attributes/
 │   └── ApiKeyAuthAttribute.cs          - IAuthorizationFilter for API key validation
 ├── Controllers/
+│   ├── AiController.cs                 - POST /api/ai/chat (outside versioning)
 │   ├── OAuthController.cs              - POST /oauth/token (outside versioning)
 │   ├── V1/
 │   │   ├── ApplicationsController.cs   - Returns raw CSV data (v1)
@@ -159,6 +168,9 @@ LampLightLabs.JobSearch.Api/
 │   ├── BasicAuthOperationFilter.cs     - Swagger padlock for Basic-protected endpoints
 │   └── BearerAuthOperationFilter.cs    - Swagger padlock for Bearer-protected endpoints
 ├── Models/
+│   ├── Ai/
+│   │   ├── AiChatRequest.cs            - Request body for POST /api/ai/chat (Prompt)
+│   │   └── AiChatResponse.cs           - Response body for POST /api/ai/chat (Response)
 │   ├── Auth/
 │   │   ├── LoginRequest.cs             - Username/password input
 │   │   ├── TokenResponse.cs            - JWT response wrapper
@@ -171,6 +183,8 @@ LampLightLabs.JobSearch.Api/
 │       ├── ApplicationResponse.cs      - Adds DaysInPipeline, IsFollowUpToday, StatusCategory
 │       └── ApplicationStatsResponse.cs - Pipeline aggregate statistics
 ├── Services/
+│   ├── IClaudeChatService.cs           - Claude chat interface
+│   ├── ClaudeChatService.cs            - Anthropic .NET SDK implementation; sends prompts to Claude
 │   ├── ICsvReaderService.cs            - Reader service interface (Strategy Pattern contract)
 │   ├── CsvReaderService.cs             - CsvHelper implementation (default production reader)
 │   ├── JsonReaderService.cs            - JSON implementation (Strategy Pattern alternative)
@@ -189,6 +203,7 @@ LampLightLabs.JobSearch.Api/
 └── Program.cs                          - DI registration and middleware
 
 LampLightLabs.JobSearch.Api.Tests/
+├── AiControllerTests.cs                - 4 tests: prompt validation, response shaping, service passthrough (IClaudeChatService mocked)
 ├── AuthenticationTests.cs              - 13 tests: TokenService, AuthController, JWT integration
 ├── ApiKeyAuthTests.cs                  - API key auth tests
 ├── BasicAuthTests.cs                   - Basic auth tests
@@ -199,7 +214,7 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
 └── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken), race condition with lock (fixed)
 
-Total: 75 tests passing
+Total: 79 tests passing
 ```
 
 ---
@@ -211,6 +226,7 @@ Total: 75 tests passing
 - Asp.Versioning.Mvc 8.1.0
 - CsvHelper
 - Microsoft.AspNetCore.Authentication.JwtBearer 8.0.22
+- Anthropic .NET SDK (Claude API integration)
 - xUnit v3
 - Moq
 - Swagger / Swashbuckle 6.9.0
@@ -230,6 +246,14 @@ Total: 75 tests passing
 4. Press `F5` to run
 5. Swagger UI will open automatically at `https://localhost:{port}/swagger`
 6. Use the dropdown in the top right to switch between v1 and v2 definitions
+
+**Optional - AI Integration:**
+To call `POST /api/ai/chat`, set a real Anthropic API key via user secrets (run from the `LampLightLabs.JobSearch.Api` directory):
+```
+dotnet user-secrets init
+dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-..."
+```
+The placeholder value in `appsettings.json` is never used for live requests - it exists only to document the expected config shape.
 
 **Running Tests:**
 - Open Test Explorer (`Ctrl+E, T`)
