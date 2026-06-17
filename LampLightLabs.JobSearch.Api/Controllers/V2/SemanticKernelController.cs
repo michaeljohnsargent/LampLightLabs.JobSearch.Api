@@ -2,13 +2,13 @@ using LampLightLabs.JobSearch.Api.Models.Sk;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace LampLightLabs.JobSearch.Api.Controllers
+namespace LampLightLabs.JobSearch.Api.Controllers.V2
 {
     /// <summary>
     /// Exposes an endpoint for sending prompts to an OpenAI model through
     /// Microsoft Semantic Kernel.
     /// </summary>
-    [Route("api/sk")]
+    [Route("api/v2/sk")]
     [ApiController]
     public class SemanticKernelController : ControllerBase
     {

@@ -1,4 +1,4 @@
-using LampLightLabs.JobSearch.Api.Controllers;
+using LampLightLabs.JobSearch.Api.Controllers.V2;
 using LampLightLabs.JobSearch.Api.Models.Ai;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
