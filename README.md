@@ -27,10 +27,10 @@ Each endpoint in the project demonstrates a different authentication scheme: JWT
 Two tests in `RaceConditionDemoTests` demonstrate race condition behavior and its fix. The broken version spins up two threads incrementing a shared counter without synchronization - at 1 million iterations the result is reliably short of 2 million, proving the lost update. The fixed version wraps the increment in a `lock` block with a shared lock object and produces exactly 2 million every time. `ProcessApplicationsAsync` in `JobsController` also demonstrates `CancellationToken` wired into a long-running async operation - the delay is cancellation-aware and the token is checked before CSV processing begins so the operation exits cleanly at a safe boundary.
 
 **7. AI Integration (Exercise)**
-`POST /api/ai/chat` accepts a JSON body with a `prompt` field and forwards it to the Anthropic Claude API via the official Anthropic .NET SDK, returning Claude's text response. `IClaudeChatService` wraps the SDK call behind an interface, consistent with the interface-based DI pattern used throughout the project, which keeps the controller and its tests free of any direct dependency on the SDK. The API key is configured under `Anthropic:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
+`POST /api/v2/ai/chat` accepts a JSON body with a `prompt` field and forwards it to the Anthropic Claude API via the official Anthropic .NET SDK, returning Claude's text response. `IClaudeChatService` wraps the SDK call behind an interface, consistent with the interface-based DI pattern used throughout the project, which keeps the controller and its tests free of any direct dependency on the SDK. The API key is configured under `Anthropic:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
 
 **8. Semantic Kernel Integration (Exercise)**
-`POST /api/sk/chat` accepts a JSON body with a `prompt` field and forwards it to an OpenAI chat completion model through Microsoft Semantic Kernel's OpenAI connector, returning the model's text response. `ISemanticKernelChatService` builds and wraps the Semantic Kernel `Kernel` behind an interface - the same pattern used for `IClaudeChatService` - so the controller and its tests have no direct dependency on Semantic Kernel or OpenAI. This mirrors a real-world scenario where an application swaps or runs multiple LLM orchestration frameworks side by side. The API key is configured under `OpenAI:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
+`POST /api/v2/sk/chat` accepts a JSON body with a `prompt` field and forwards it to an OpenAI chat completion model through Microsoft Semantic Kernel's OpenAI connector, returning the model's text response. `ISemanticKernelChatService` builds and wraps the Semantic Kernel `Kernel` behind an interface - the same pattern used for `IClaudeChatService` - so the controller and its tests have no direct dependency on Semantic Kernel or OpenAI. This mirrors a real-world scenario where an application swaps or runs multiple LLM orchestration frameworks side by side. The API key is configured under `OpenAI:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
 
 ---
 
@@ -61,10 +61,10 @@ All endpoints are versioned using URL segment versioning (`/api/v{version}/...`)
 | GET | `/api/v1/jobs/{jobId}/status` | v1 | None | Polls the status of a running or completed job |
 
 ### AI
-| Method | Route | Auth | Description |
-|---|---|---|---|
-| POST | `/api/ai/chat` | None | Accepts `{ "prompt": "..." }` and returns Claude's response via the Anthropic .NET SDK |
-| POST | `/api/sk/chat` | None | Accepts `{ "prompt": "..." }` and returns an OpenAI model's response via Microsoft Semantic Kernel |
+| Method | Route | Version | Auth | Description |
+|---|---|---|---|---|
+| POST | `/api/v2/ai/chat` | v2 | None | Accepts `{ "prompt": "..." }` and returns Claude's response via the Anthropic .NET SDK |
+| POST | `/api/v2/sk/chat` | v2 | None | Accepts `{ "prompt": "..." }` and returns an OpenAI model's response via Microsoft Semantic Kernel |
 
 ---
 
@@ -160,15 +160,15 @@ LampLightLabs.JobSearch.Api/
 ├── Attributes/
 │   └── ApiKeyAuthAttribute.cs          - IAuthorizationFilter for API key validation
 ├── Controllers/
-│   ├── AiController.cs                 - POST /api/ai/chat (outside versioning)
 │   ├── OAuthController.cs              - POST /oauth/token (outside versioning)
-│   ├── SemanticKernelController.cs     - POST /api/sk/chat (outside versioning)
 │   ├── V1/
 │   │   ├── ApplicationsController.cs   - Returns raw CSV data (v1)
 │   │   ├── AuthController.cs           - POST /api/v1/auth/token (JWT issuance)
 │   │   └── JobsController.cs           - Async job pattern endpoints (v1)
 │   └── V2/
-│       └── ApplicationsController.cs   - Enriched data, status, count, stats, and idempotent POST endpoints (v2)
+│       ├── AiController.cs             - POST /api/v2/ai/chat (v2)
+│       ├── ApplicationsController.cs   - Enriched data, status, count, stats, and idempotent POST endpoints (v2)
+│       └── SemanticKernelController.cs - POST /api/v2/sk/chat (v2)
 ├── Filters/
 │   ├── BasicAuthOperationFilter.cs     - Swagger padlock for Basic-protected endpoints
 │   └── BearerAuthOperationFilter.cs    - Swagger padlock for Bearer-protected endpoints
@@ -260,7 +260,7 @@ Total: 83 tests passing
 6. Use the dropdown in the top right to switch between v1 and v2 definitions
 
 **Optional - AI Integration:**
-To call `POST /api/ai/chat` or `POST /api/sk/chat`, set real API keys via user secrets (run from the `LampLightLabs.JobSearch.Api` directory):
+To call `POST /api/v2/ai/chat` or `POST /api/v2/sk/chat`, set real API keys via user secrets (run from the `LampLightLabs.JobSearch.Api` directory):
 ```
 dotnet user-secrets init
 dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-..."
@@ -282,7 +282,7 @@ The placeholder values in `appsettings.json` are never used for live requests - 
 
 **Calculated fields in V2, not V1** - V1 returns raw data. V2 applies business logic server-side. This is the correct versioning pattern - rather than modifying an existing contract, a new version introduces the enriched shape while V1 remains stable and unchanged.
 
-**OAuth token endpoint outside versioning** - `POST /oauth/token` lives at the root, not under `/api/v1/` or `/api/v2/`. Auth infrastructure is not a versioned resource. Moving a token endpoint under a new version would break all existing clients - there is no good reason to version it.
+**OAuth token endpoint outside versioning** - `POST /oauth/token` lives at the root, not under `/api/v1/` or `/api/v2/`. Auth infrastructure is not a versioned resource. Moving a token endpoint under a new version would break all existing clients - there is no good reason to version it. The AI endpoints (`/api/v2/ai/chat`, `/api/v2/sk/chat`) are a different case: they are feature endpoints and correctly live under V2 alongside the other application endpoints.
 
 **Client Credentials over Authorization Code for the first OAuth exercise** - Client Credentials is the most common OAuth flow in backend contract work. No browser, no redirect, no user session - a service authenticates and gets a token. Authorization Code is the right next step for user-delegated access scenarios.
 

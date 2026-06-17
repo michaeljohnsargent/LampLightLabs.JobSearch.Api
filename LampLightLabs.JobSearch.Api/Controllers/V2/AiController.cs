@@ -2,12 +2,12 @@ using LampLightLabs.JobSearch.Api.Models.Ai;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace LampLightLabs.JobSearch.Api.Controllers
+namespace LampLightLabs.JobSearch.Api.Controllers.V2
 {
     /// <summary>
     /// Exposes an endpoint for sending prompts to the Anthropic Claude API.
     /// </summary>
-    [Route("api/ai")]
+    [Route("api/v2/ai")]
     [ApiController]
     public class AiController : ControllerBase
     {
