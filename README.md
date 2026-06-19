@@ -32,11 +32,12 @@ Two tests in `RaceConditionDemoTests` demonstrate race condition behavior and it
 **8. Semantic Kernel Integration (Exercise)**
 `POST /api/v2/sk/chat` accepts a JSON body with a `prompt` field and forwards it to an OpenAI chat completion model through Microsoft Semantic Kernel's OpenAI connector, returning the model's text response. `ISemanticKernelChatService` builds and wraps the Semantic Kernel `Kernel` behind an interface - the same pattern used for `IClaudeChatService` - so the controller and its tests have no direct dependency on Semantic Kernel or OpenAI. This mirrors a real-world scenario where an application swaps or runs multiple LLM orchestration frameworks side by side. The API key is configured under `OpenAI:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
 
+**9. RAG Pipeline (Exercise)**
+`POST /api/rag/match` accepts the full text of a job description and returns a structured match analysis against the resume: a match score (0–100), a 2–3 sentence narrative, identified strengths, gaps, and the specific resume chunks that informed the analysis. At startup, `ResumeVectorStoreService` (a `BackgroundService`) splits the resume into sections, embeds each one using OpenAI's `text-embedding-3-small` model, and holds the vectors in memory. On each request, the job description is embedded, cosine similarity retrieves the top-3 most relevant resume sections, and those sections are injected into a structured prompt sent to Claude via the Anthropic API. Claude returns a raw JSON object; the service deserializes it and attaches `retrievedContext` from the vector store rather than trusting the model to report which chunks it used. `IPromptRepository` owns all prompt construction — system instructions and user message assembly are separated from orchestration logic so prompts can be reviewed, swapped, or tested independently.
+
 ---
 
 ## Endpoints
-
-All endpoints are versioned using URL segment versioning (`/api/v{version}/...`).
 
 ### Auth
 | Method | Route | Auth | Description |
@@ -61,10 +62,15 @@ All endpoints are versioned using URL segment versioning (`/api/v{version}/...`)
 | GET | `/api/v1/jobs/{jobId}/status` | v1 | None | Polls the status of a running or completed job |
 
 ### AI
-| Method | Route | Version | Auth | Description |
-|---|---|---|---|---|
-| POST | `/api/v2/ai/chat` | v2 | None | Accepts `{ "prompt": "..." }` and returns Claude's response via the Anthropic .NET SDK |
-| POST | `/api/v2/sk/chat` | v2 | None | Accepts `{ "prompt": "..." }` and returns an OpenAI model's response via Microsoft Semantic Kernel |
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| POST | `/api/v2/ai/chat` | None | Accepts `{ "prompt": "..." }` and returns Claude's response via the Anthropic .NET SDK |
+| POST | `/api/v2/sk/chat` | None | Accepts `{ "prompt": "..." }` and returns an OpenAI model's response via Microsoft Semantic Kernel |
+
+### RAG
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| POST | `/api/rag/match` | None | Accepts `{ "jobDescription": "..." }` and returns a structured resume match analysis: score, summary, strengths, gaps, and the retrieved resume chunks |
 
 ---
 
@@ -151,6 +157,38 @@ The background task accepts a `CancellationToken`. The 3-second delay is cancell
 
 ---
 
+## RAG Pipeline - How It Works
+```
+Startup
+  ResumeVectorStoreService (BackgroundService)
+  └── Loads resume.txt, splits on ---
+  └── Embeds each chunk via OpenAI text-embedding-3-small
+  └── Stores (chunk, embedding[]) in memory
+  └── Signals ready via TaskCompletionSource
+
+Request: POST /api/rag/match { "jobDescription": "..." }
+  │
+  ├─ 1. GetRelevantChunksAsync(jobDescription, topK: 3)
+  │       Embeds the job description
+  │       Cosine similarity against all stored resume chunks
+  │       Returns top-3 chunks
+  │
+  ├─ 2. IPromptRepository.BuildRagMatchUserMessage(jd, chunks)
+  │       Assembles: Job Description + Resume Context
+  │
+  ├─ 3. IClaudeChatService.SendPromptAsync(systemPrompt, userMessage)
+  │       System: "Return only raw JSON: matchScore, summary, strengths, gaps"
+  │       Returns raw JSON string
+  │
+  ├─ 4. JsonSerializer.Deserialize → LlmMatchResult
+  │
+  └─ 5. Return RagMatchResponse
+          matchScore, summary, strengths, gaps  ← from Claude
+          retrievedContext                       ← from vector store (step 1)
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -161,6 +199,7 @@ LampLightLabs.JobSearch.Api/
 │   └── ApiKeyAuthAttribute.cs          - IAuthorizationFilter for API key validation
 ├── Controllers/
 │   ├── OAuthController.cs              - POST /oauth/token (outside versioning)
+│   ├── RagController.cs                - POST /api/rag/match (outside versioning)
 │   ├── V1/
 │   │   ├── ApplicationsController.cs   - Returns raw CSV data (v1)
 │   │   ├── AuthController.cs           - POST /api/v1/auth/token (JWT issuance)
@@ -181,6 +220,9 @@ LampLightLabs.JobSearch.Api/
 │   │   ├── TokenResponse.cs            - JWT response wrapper
 │   │   ├── OAuthTokenRequest.cs        - client_id, client_secret, grant_type, scope
 │   │   └── OAuthTokenResponse.cs       - access_token, token_type, expires_in, scope
+│   ├── Rag/
+│   │   ├── RagMatchRequest.cs          - Request body: JobDescription string
+│   │   └── RagMatchResponse.cs         - Response: MatchScore, Summary, Strengths, Gaps, RetrievedContext
 │   ├── Sk/
 │   │   ├── SkChatRequest.cs            - Request body for POST /api/sk/chat (Prompt)
 │   │   └── SkChatResponse.cs           - Response body for POST /api/sk/chat (Response)
@@ -190,11 +232,19 @@ LampLightLabs.JobSearch.Api/
 │       ├── ApplicationRequest.cs       - POST request body for idempotent application creation
 │       ├── ApplicationResponse.cs      - Adds DaysInPipeline, IsFollowUpToday, StatusCategory
 │       └── ApplicationStatsResponse.cs - Pipeline aggregate statistics
+├── ResumeData/
+│   └── resume.txt                      - Resume split into sections by --- for RAG chunking
 ├── Services/
-│   ├── IClaudeChatService.cs           - Claude chat interface
-│   ├── ClaudeChatService.cs            - Anthropic .NET SDK implementation; sends prompts to Claude
+│   ├── IClaudeChatService.cs           - Claude chat interface (single-prompt and system+user overloads)
+│   ├── ClaudeChatService.cs            - Anthropic .NET SDK implementation
 │   ├── ISemanticKernelChatService.cs   - Semantic Kernel chat interface
-│   ├── SemanticKernelChatService.cs    - Builds a Semantic Kernel Kernel with the OpenAI connector; sends prompts
+│   ├── SemanticKernelChatService.cs    - Builds a Semantic Kernel Kernel with the OpenAI connector
+│   ├── IPromptRepository.cs            - Prompt construction interface
+│   ├── PromptRepository.cs             - System prompt and user message assembly for the RAG pipeline
+│   ├── IResumeVectorStoreService.cs    - Vector store interface
+│   ├── ResumeVectorStoreService.cs     - BackgroundService: embeds resume at startup, serves top-K chunks by cosine similarity
+│   ├── IRagMatchService.cs             - RAG match orchestration interface
+│   ├── RagMatchService.cs              - Retrieves chunks, builds prompt, calls Claude, parses JSON, injects RetrievedContext
 │   ├── ICsvReaderService.cs            - Reader service interface (Strategy Pattern contract)
 │   ├── CsvReaderService.cs             - CsvHelper implementation (default production reader)
 │   ├── JsonReaderService.cs            - JSON implementation (Strategy Pattern alternative)
@@ -221,11 +271,14 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── CsvReaderServiceTests.cs            - CSV parsing tests + 5 JsonReaderService tests including Strategy Pattern proof
 ├── JobStoreTests.cs                    - JobStore concurrency and state tests
 ├── IdempotencyTests.cs                 - 4 integration tests: new key, replay, missing key, key reuse conflict
+├── PromptRepositoryTests.cs            - 6 tests: system prompt content, user message assembly (no mocks)
+├── RagControllerTests.cs               - 6 tests: validation, response shaping, service passthrough (IRagMatchService mocked)
+├── RagMatchServiceTests.cs             - 7 tests: JSON parsing, RetrievedContext injection, orchestration wiring (all dependencies mocked)
 ├── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
-├── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken), race condition with lock (fixed)
+├── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken by design), race condition with lock (fixed)
 └── SemanticKernelControllerTests.cs    - 4 tests: prompt validation, response shaping, service passthrough (ISemanticKernelChatService mocked)
 
-Total: 83 tests passing
+Total: 102 tests passing
 ```
 
 ---
@@ -237,8 +290,8 @@ Total: 83 tests passing
 - Asp.Versioning.Mvc 8.1.0
 - CsvHelper
 - Microsoft.AspNetCore.Authentication.JwtBearer 8.0.22
-- Anthropic .NET SDK (Claude API integration)
-- Microsoft Semantic Kernel (OpenAI connector)
+- Anthropic .NET SDK (Claude API - chat and RAG generation)
+- Microsoft Semantic Kernel 1.77.0 (OpenAI chat and text-embedding-3-small)
 - xUnit v3
 - Moq
 - Swagger / Swashbuckle 6.9.0
@@ -260,13 +313,13 @@ Total: 83 tests passing
 6. Use the dropdown in the top right to switch between v1 and v2 definitions
 
 **Optional - AI Integration:**
-To call `POST /api/v2/ai/chat` or `POST /api/v2/sk/chat`, set real API keys via user secrets (run from the `LampLightLabs.JobSearch.Api` directory):
+To call the AI endpoints or the RAG pipeline, set real API keys via user secrets (run from the `LampLightLabs.JobSearch.Api` directory):
 ```
 dotnet user-secrets init
 dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-..."
 dotnet user-secrets set "OpenAI:ApiKey" "sk-..."
 ```
-The placeholder values in `appsettings.json` are never used for live requests - they exist only to document the expected config shape.
+The embedding model (`text-embedding-3-small`) and chat model (`gpt-4o-mini`) are configured in `appsettings.json` under `OpenAI:EmbeddingModel` and `OpenAI:Model` — no secret required, change them there if needed. The placeholder API key values in `appsettings.json` are never used for live requests; they exist only to document the expected config shape.
 
 **Running Tests:**
 - Open Test Explorer (`Ctrl+E, T`)
@@ -282,7 +335,7 @@ The placeholder values in `appsettings.json` are never used for live requests - 
 
 **Calculated fields in V2, not V1** - V1 returns raw data. V2 applies business logic server-side. This is the correct versioning pattern - rather than modifying an existing contract, a new version introduces the enriched shape while V1 remains stable and unchanged.
 
-**OAuth token endpoint outside versioning** - `POST /oauth/token` lives at the root, not under `/api/v1/` or `/api/v2/`. Auth infrastructure is not a versioned resource. Moving a token endpoint under a new version would break all existing clients - there is no good reason to version it. The AI endpoints (`/api/v2/ai/chat`, `/api/v2/sk/chat`) are a different case: they are feature endpoints and correctly live under V2 alongside the other application endpoints.
+**OAuth token endpoint outside versioning** - `POST /oauth/token` lives at the root, not under `/api/v1/` or `/api/v2/`. Auth infrastructure is not a versioned resource. Moving a token endpoint under a new version would break all existing clients - there is no good reason to version it. The RAG endpoint (`/api/rag/match`) follows the same principle for the same reason: it is infrastructure-level capability, not a versioned business resource.
 
 **Client Credentials over Authorization Code for the first OAuth exercise** - Client Credentials is the most common OAuth flow in backend contract work. No browser, no redirect, no user session - a service authenticates and gets a token. Authorization Code is the right next step for user-delegated access scenarios.
 
@@ -301,6 +354,16 @@ The placeholder values in `appsettings.json` are never used for live requests - 
 **SHA-256 request fingerprinting** - On first call the server hashes the serialized request body and stores it alongside the cached response. On retry, if the key matches but the hash does not, the server returns 422. This catches a client who reuses a key on a different payload - a bug that would otherwise be silently mishandled.
 
 **Characterization tests before refactoring** - `StatusCategorizerService` was a private static method on `ApplicationsController` before extraction. Characterization tests were written against the extracted service before any logic was changed. One test (`Applied_ReturnsUnknown`) explicitly documents a gap in the current logic and freezes it as-is. The fix belongs in a subsequent PR after the safety net is in place - not during the characterization pass.
+
+**BackgroundService for startup embedding** - `ResumeVectorStoreService` implements both `IResumeVectorStoreService` and `BackgroundService`. The singleton instance is registered once and resolved as both, so the host starts it as a background service while DI injects it as the vector store interface. Resume chunks are embedded once at startup and held in memory — no re-embedding per request. A `TaskCompletionSource` signals when initialization is complete; any request that arrives before startup finishes awaits it rather than racing against an empty store.
+
+**Manual cosine similarity over a vector store library** - With five resume chunks and one query embedding, the lookup is O(n) over a tiny list. A dedicated vector store library would add a dependency with no runtime benefit at this scale. The math is four lines and fully transparent in the codebase. The pattern scales to a library (Azure AI Search, Qdrant, etc.) with a one-interface swap when the dataset grows.
+
+**IPromptRepository separates prompt authoring from orchestration** - `RagMatchService` asks the repository for a system prompt and a user message; it does not construct strings itself. This means prompt content can be reviewed and tested in isolation (`PromptRepositoryTests` has no mocks), swapped without touching the service, or evolved to load from files or a database without changing the caller.
+
+**RetrievedContext injected in the service, not by the model** - The chunks returned by the vector store are attached to the response in `RagMatchService`, not sourced from the LLM output. Claude is asked only for `matchScore`, `summary`, `strengths`, and `gaps`. This prevents hallucination in the `retrievedContext` field and keeps the record of which chunks were retrieved authoritative and deterministic.
+
+**System prompt separated from user message** - `IClaudeChatService` was extended with a `SendPromptAsync(string systemPrompt, string userMessage, CancellationToken ct)` overload that maps to the Anthropic API's separate `system` and `messages` parameters. The existing single-string overload is unchanged and all prior tests continue to pass. Mixing system instructions into the user message works, but the Anthropic API accepts them separately and Claude responds more reliably when the distinction is explicit.
 
 ---
 
