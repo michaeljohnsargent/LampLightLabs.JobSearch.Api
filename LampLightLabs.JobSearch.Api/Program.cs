@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using LampLightLabs.JobSearch.Api.Filters;
+using LampLightLabs.JobSearch.Api.Middleware;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -117,6 +118,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseMiddleware<NewlineSanitizingMiddleware>();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();

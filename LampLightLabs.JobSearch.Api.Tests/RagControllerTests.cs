@@ -109,4 +109,53 @@ public class RagControllerTests
 
         mock.Verify(s => s.MatchAsync("Backend .NET role at Acme Corp", ct), Times.Once);
     }
+
+    // --- Input sanitization ---
+
+    [Fact]
+    public async Task Match_JobDescriptionWithControlCharacters_StripsThemBeforeCallingService()
+    {
+        // NUL (\x00) and BEL (\x07) are stripped; tabs and double spaces are collapsed to single spaces.
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RagMatchResponse());
+        var controller = new RagController(mock.Object);
+
+        await controller.Match(
+            new RagMatchRequest { JobDescription = "Senior\x00 .NET\x07  Engineer\twith Azure" }, ct);
+
+        mock.Verify(s => s.MatchAsync("Senior .NET Engineer with Azure", ct), Times.Once);
+    }
+
+    [Fact]
+    public async Task Match_JobDescriptionOnlyControlCharacters_Returns400()
+    {
+        // A string of only control characters sanitizes to empty — should still be rejected.
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        var controller = new RagController(mock.Object);
+
+        var result = await controller.Match(
+            new RagMatchRequest { JobDescription = "\x00\x01\x02\x07" }, ct);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        mock.Verify(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Match_JobDescriptionWithExcessiveNewlines_CollapsesToTwoBeforeCallingService()
+    {
+        // Three or more consecutive newlines are capped at two.
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RagMatchResponse());
+        var controller = new RagController(mock.Object);
+
+        await controller.Match(
+            new RagMatchRequest { JobDescription = "Requirements\n\n\n\nResponsibilities" }, ct);
+
+        mock.Verify(s => s.MatchAsync("Requirements\n\nResponsibilities", ct), Times.Once);
+    }
 }

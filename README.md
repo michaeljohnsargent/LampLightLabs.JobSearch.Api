@@ -33,7 +33,7 @@ Two tests in `RaceConditionDemoTests` demonstrate race condition behavior and it
 `POST /api/v2/sk/chat` accepts a JSON body with a `prompt` field and forwards it to an OpenAI chat completion model through Microsoft Semantic Kernel's OpenAI connector, returning the model's text response. `ISemanticKernelChatService` builds and wraps the Semantic Kernel `Kernel` behind an interface - the same pattern used for `IClaudeChatService` - so the controller and its tests have no direct dependency on Semantic Kernel or OpenAI. This mirrors a real-world scenario where an application swaps or runs multiple LLM orchestration frameworks side by side. The API key is configured under `OpenAI:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
 
 **9. RAG Pipeline (Exercise)**
-`POST /api/rag/match` accepts the full text of a job description and returns a structured match analysis against the resume: a match score (0–100), a 2–3 sentence narrative, identified strengths, gaps, and the specific resume chunks that informed the analysis. At startup, `ResumeVectorStoreService` (a `BackgroundService`) splits the resume into sections, embeds each one using OpenAI's `text-embedding-3-small` model, and holds the vectors in memory. On each request, the job description is embedded, cosine similarity retrieves the top-3 most relevant resume sections, and those sections are injected into a structured prompt sent to Claude via the Anthropic API. Claude returns a raw JSON object; the service deserializes it and attaches `retrievedContext` from the vector store rather than trusting the model to report which chunks it used. `IPromptRepository` owns all prompt construction — system instructions and user message assembly are separated from orchestration logic so prompts can be reviewed, swapped, or tested independently.
+`POST /api/rag/match` accepts the full text of a job description and returns a structured match analysis against the resume: a match score (0–100), a 2–3 sentence narrative, identified strengths, gaps, and the specific resume chunks that informed the analysis. Input sanitization happens in two layers: `NewlineSanitizingMiddleware` runs first and replaces literal `\r\n`, `\r`, and `\n` characters in the raw JSON body with spaces before the JSON deserializer sees them (unescaped newlines inside a JSON string value are illegal per RFC 8259 and would cause a parse error before the request reaches any controller), then the controller strips non-printable control characters, normalizes any remaining line endings, collapses horizontal whitespace runs, and caps consecutive blank lines at two, so the LLM always receives clean input regardless of how the client serialized the text. At startup, `ResumeVectorStoreService` (a `BackgroundService`) splits the resume into sections, embeds each one using OpenAI's `text-embedding-3-small` model, and holds the vectors in memory. On each request, the sanitized job description is embedded, cosine similarity retrieves the top-3 most relevant resume sections, and those sections are injected into a structured prompt sent to Claude via the Anthropic API. Claude returns a raw JSON object; the service deserializes it and attaches `retrievedContext` from the vector store rather than trusting the model to report which chunks it used. `IPromptRepository` owns all prompt construction — system instructions and user message assembly are separated from orchestration logic so prompts can be reviewed, swapped, or tested independently. Requires `OpenAI:ApiKey` (embeddings) and `Anthropic:ApiKey` (generation) set in user secrets.
 
 ---
 
@@ -70,7 +70,38 @@ Two tests in `RaceConditionDemoTests` demonstrate race condition behavior and it
 ### RAG
 | Method | Route | Auth | Description |
 |---|---|---|---|
-| POST | `/api/rag/match` | None | Accepts `{ "jobDescription": "..." }` and returns a structured resume match analysis: score, summary, strengths, gaps, and the retrieved resume chunks |
+| POST | `/api/rag/match` | None | Accepts a job description and returns a structured resume match analysis: score (0–100), narrative summary, strengths, gaps, and the retrieved resume chunks |
+
+**Request: POST /api/rag/match**
+```json
+{
+  "jobDescription": "We are looking for a Senior .NET Engineer with Azure experience..."
+}
+```
+
+> Requires `OpenAI:ApiKey` (embeddings via `text-embedding-3-small`) and `Anthropic:ApiKey` (generation via Claude) set in user secrets. See **Running Locally** for setup.
+
+**Response:**
+```json
+{
+  "matchScore": 82,
+  "summary": "Strong fit for a senior .NET backend role. Candidate brings 26 years of C# and Azure experience directly aligned with the core requirements. Minor gaps in Kubernetes and container orchestration.",
+  "strengths": [
+    "26 years C#/.NET experience across enterprise and federal domains",
+    "Azure DevOps, Azure Functions, and cloud-native architecture",
+    "REST API design, SQL Server, and microservices patterns"
+  ],
+  "gaps": [
+    "No explicit Kubernetes or container orchestration experience",
+    "Limited frontend/React experience"
+  ],
+  "retrievedContext": [
+    "RECENT EXPERIENCE section: Principal Engineer at ...",
+    "TECHNICAL SKILLS section: C#, .NET 8, Azure, ...",
+    "PROFESSIONAL SUMMARY section: ..."
+  ]
+}
+```
 
 ---
 
@@ -211,6 +242,8 @@ LampLightLabs.JobSearch.Api/
 ├── Filters/
 │   ├── BasicAuthOperationFilter.cs     - Swagger padlock for Basic-protected endpoints
 │   └── BearerAuthOperationFilter.cs    - Swagger padlock for Bearer-protected endpoints
+├── Middleware/
+│   └── NewlineSanitizingMiddleware.cs  - Replaces literal newlines in JSON bodies with spaces before deserialization
 ├── Models/
 │   ├── Ai/
 │   │   ├── AiChatRequest.cs            - Request body for POST /api/ai/chat (Prompt)
@@ -271,14 +304,15 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── CsvReaderServiceTests.cs            - CSV parsing tests + 5 JsonReaderService tests including Strategy Pattern proof
 ├── JobStoreTests.cs                    - JobStore concurrency and state tests
 ├── IdempotencyTests.cs                 - 4 integration tests: new key, replay, missing key, key reuse conflict
+├── NewlineSanitizingMiddlewareTests.cs - 4 tests: \n, \r\n, \r replacement; non-JSON body passthrough (no ASP.NET hosting)
 ├── PromptRepositoryTests.cs            - 6 tests: system prompt content, user message assembly (no mocks)
-├── RagControllerTests.cs               - 6 tests: validation, response shaping, service passthrough (IRagMatchService mocked)
+├── RagControllerTests.cs               - 9 tests: validation, input sanitization (control chars, whitespace, newlines), response shaping, service passthrough (IRagMatchService mocked)
 ├── RagMatchServiceTests.cs             - 7 tests: JSON parsing, RetrievedContext injection, orchestration wiring (all dependencies mocked)
 ├── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
 ├── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken by design), race condition with lock (fixed)
 └── SemanticKernelControllerTests.cs    - 4 tests: prompt validation, response shaping, service passthrough (ISemanticKernelChatService mocked)
 
-Total: 102 tests passing
+Total: 109 tests passing
 ```
 
 ---
@@ -364,6 +398,8 @@ The embedding model (`text-embedding-3-small`) and chat model (`gpt-4o-mini`) ar
 **RetrievedContext injected in the service, not by the model** - The chunks returned by the vector store are attached to the response in `RagMatchService`, not sourced from the LLM output. Claude is asked only for `matchScore`, `summary`, `strengths`, and `gaps`. This prevents hallucination in the `retrievedContext` field and keeps the record of which chunks were retrieved authoritative and deterministic.
 
 **System prompt separated from user message** - `IClaudeChatService` was extended with a `SendPromptAsync(string systemPrompt, string userMessage, CancellationToken ct)` overload that maps to the Anthropic API's separate `system` and `messages` parameters. The existing single-string overload is unchanged and all prior tests continue to pass. Mixing system instructions into the user message works, but the Anthropic API accepts them separately and Claude responds more reliably when the distinction is explicit.
+
+**Two-layer input sanitization** - Sanitizing a job description that a client pastes as raw text requires two separate passes at different points in the pipeline. `NewlineSanitizingMiddleware` handles what the JSON parser would reject before the controller is ever called: literal `\n` and `\r` characters inside a JSON string value are illegal per RFC 8259 — the parser returns a 400 long before model binding or controller logic runs. The middleware reads the raw body, replaces those characters with spaces, and rewrites the stream. `RagController` handles what is legal JSON but still dirty for LLM input: non-printable control characters (`\x00`–`\x1F`, excluding whitespace), excess whitespace runs, and blank line clusters. The sanitized value is re-validated after cleaning so a string composed entirely of control characters still returns 400. This separation is intentional: the middleware fixes a protocol-level violation; the controller fixes application-level hygiene. Mixing them in one place would either put JSON wire-format concerns in a controller or put application semantics in infrastructure.
 
 ---
 
