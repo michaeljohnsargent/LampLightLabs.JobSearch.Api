@@ -12,4 +12,13 @@ public interface IClaudeChatService
     /// <param name="cancellationToken">Token used to cancel the request.</param>
     /// <returns>Claude's text response.</returns>
     Task<string> SendPromptAsync(string prompt, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends a system prompt and user message to Claude and returns the text of its response.
+    /// </summary>
+    /// <param name="systemPrompt">The system-level instructions for Claude.</param>
+    /// <param name="userMessage">The user-turn content.</param>
+    /// <param name="cancellationToken">Token used to cancel the request.</param>
+    /// <returns>Claude's text response.</returns>
+    Task<string> SendPromptAsync(string systemPrompt, string userMessage, CancellationToken cancellationToken);
 }

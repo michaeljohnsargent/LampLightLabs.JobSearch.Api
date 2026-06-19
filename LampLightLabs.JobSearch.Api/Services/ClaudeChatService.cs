@@ -34,10 +34,27 @@ public class ClaudeChatService : IClaudeChatService
             Messages = [new() { Role = Role.User, Content = prompt }]
         }, cancellationToken: cancellationToken);
 
-        return response.Content
+        return ExtractText(response);
+    }
+
+    /// <inheritdoc />
+    public async Task<string> SendPromptAsync(string systemPrompt, string userMessage, CancellationToken cancellationToken)
+    {
+        var response = await _client.Messages.Create(new MessageCreateParams
+        {
+            Model = _model,
+            MaxTokens = 1024,
+            System = systemPrompt,
+            Messages = [new() { Role = Role.User, Content = userMessage }]
+        }, cancellationToken: cancellationToken);
+
+        return ExtractText(response);
+    }
+
+    private static string ExtractText(Message response) =>
+        response.Content
             .Select(b => b.Value)
             .OfType<TextBlock>()
             .Select(t => t.Text)
             .FirstOrDefault() ?? string.Empty;
-    }
 }

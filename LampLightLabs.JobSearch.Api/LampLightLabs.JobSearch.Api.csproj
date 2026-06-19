@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <UserSecretsId>81eabbdb-a7a2-4e43-831e-69d2ad2b9564</UserSecretsId>
+    <!-- AddOpenAIEmbeddingGenerator is an experimental SK connector API (stable alternative not yet available in 1.77.0) -->
+    <NoWarn>$(NoWarn);SKEXP0010</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +23,9 @@
 
   <ItemGroup>
     <None Update="TestData\applications.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="ResumeData\resume.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

@@ -94,6 +94,15 @@ builder.Services.AddSingleton<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IStatusCategorizerService, StatusCategorizerService>();
 builder.Services.AddScoped<IClaudeChatService, ClaudeChatService>();
 builder.Services.AddScoped<ISemanticKernelChatService, SemanticKernelChatService>();
+var openAiApiKey = builder.Configuration["OpenAI:ApiKey"]
+    ?? throw new InvalidOperationException("OpenAI API key is not configured. Use user secrets or environment variables in production.");
+var openAiEmbeddingModel = builder.Configuration["OpenAI:EmbeddingModel"] ?? "text-embedding-3-small";
+builder.Services.AddOpenAIEmbeddingGenerator(openAiEmbeddingModel, openAiApiKey);
+builder.Services.AddSingleton<ResumeVectorStoreService>();
+builder.Services.AddSingleton<IResumeVectorStoreService>(sp => sp.GetRequiredService<ResumeVectorStoreService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ResumeVectorStoreService>());
+builder.Services.AddSingleton<IPromptRepository, PromptRepository>();
+builder.Services.AddScoped<IRagMatchService, RagMatchService>();
 
 var app = builder.Build();
 
