@@ -1,0 +1,45 @@
+PROFESSIONAL SUMMARY
+
+Michael Sargent is a Senior .NET and C# engineer with 26 years delivering production systems across defense, federal, financial, and healthcare sectors. Available for contract engagements on a W2 basis. Known for speed-to-results: automated a 3-month compliance project in 6 weeks at Blue Cross Blue Shield of SC, re-engineered loan export middleware at First Franklin using Azure Functions and microservices patterns, and designed a Git-based source control workflow for a SaaS platform that had no change history or peer review. No hand-holding, no lengthy onboarding — assess the problem, communicate honestly, deliver.
+
+---
+
+TECHNICAL SKILLS
+
+Languages and Frameworks: C#, .NET Core, .NET 6/8, ASP.NET Core, ASP.NET MVC, Python, Ruby on Rails, VB.NET, Bash, PowerShell, SQL, HTML/CSS, TypeScript. Cloud and DevOps: Azure DevOps, Azure Functions, Azure Key Vault, Azure Storage, Azure API Management (APIM), Azure Service Bus, Git, YAML Pipelines, CI/CD, GitHub Actions, Jenkins, Docker. Databases: SQL Server 2008-2022, PostgreSQL, MySQL, SQLite, Oracle, Entity Framework, Entity Framework Core, SQLAlchemy. Integration and Tools: Dynamics 365 CRM, REST/SOAP API design, RabbitMQ, Splunk, Swagger, XrmToolbox. Methods: Agile/Scrum, Kanban, TDD, Integration Patterns, OOP, Systems Integration, Technical Documentation, Domain-Driven Design, CQRS, Repository Pattern, Factory Pattern, Middleware Pipeline.
+
+---
+
+RECENT EXPERIENCE
+
+Founder, Lamp Light Labs (Oct 2025 - Present). Founded to deliver senior software engineering and contract development services. Builds production-quality ASP.NET Core 8 Web APIs with multiple authentication schemes (JWT Bearer, API Key, Basic Auth, OAuth 2.0 Client Credentials). Current AI integration project: integrated Anthropic Claude via native SDK (POST /api/ai/chat) and OpenAI GPT via Microsoft Semantic Kernel (POST /api/sk/chat). Built RAG pipeline with in-memory vector search and cosine similarity ranking (POST /api/rag/match). Maintains 100+ passing tests using xUnit, Moq, and WebApplicationFactory integration testing.
+
+Senior Software Engineer, First Franklin Financial Corporation via Find Great People (Feb 2023 - Mar 2026), Remote Contract. Designed and built a Git-based source control workflow for custom JavaScript inside MeridianLink DecisionLender SaaS, replacing a UI-dependent process with no change history or peer review — approved by management. Re-engineered Real Estate loan export middleware using Azure Functions, Key Vault, Storage Tables, and GitHub Actions, applying microservices patterns to replace a fully manual process. Implemented API versioning across ASP.NET Core APIs and Swagger documentation. Led Power BI team adoption of Git-based source control, replacing a folder-based system with 20-30 duplicate script versions.
+
+---
+
+FEDERAL AND HEALTHCARE EXPERIENCE
+
+Senior Software Developer, Veterans Health Administration via Booz Allen Hamilton (May 2022 - Feb 2023), Remote Contract. Back-end developer on a 30+ person Agile program modernizing the VA's Beneficiary Travel Self-Service System for veteran travel reimbursement claims. Built Dynamics 365 CRM plugins in C# integrating external APIs to automate adjudication of claims. Wrote unit and integration tests using MSTest, NUnit, Moq, and SoapUI under TDD disciplines; deployed via XrmToolbox and Azure DevOps pipelines.
+
+Senior Software Developer, Blue Cross Blue Shield of South Carolina via Trident Solutions (Oct 2020 - May 2022), Remote Contract. Brought onto a 3-person team to automate compliance evidence collection for a major security audit; original estimate was 3 developers and 3 months. Delivered the full system to production in 6 weeks with 2.5 developers using Python 3.8 Windows Service with SQLAlchemy ORM, asyncio, and scheduled execution. Built Splunk SPL dashboards giving real-time visibility into 150 assessors' evidence collection.
+
+Senior Software Engineer, U.S. Department of State Global Financial Services via SOS International (Nov 2018 - Oct 2020), Charleston SC Contract. Embedded engineer supporting financial systems handling payroll, accounting, and currency exchange for U.S. posts in 134+ countries across 180 currencies. Automated batch operations via PowerShell and BMC Control-M; performed root-cause analysis on production incidents to maintain SLAs. Full-stack web development using MVC/MVVM and Entity Framework.
+
+---
+
+DEFENSE AND EARLIER CAREER
+
+Senior Software Engineer / Acting Supervisor, BAE Systems (1999-2014), Charleston SC. 15-year career progressing from developer to acting supervisor of a 5-person systems development team. Subject matter expert for software and database development on the Army's Automated Installation Entry (AIE) access control contract. Built custom C4I applications, web portals, reporting systems, and data integration tools in C# and .NET. Won the BAE Systems Chairman's Award for Innovation 6 times.
+
+Field Support Lead / Software Engineer, Iberon LLC, Army AIE II+ Contract (2015-2018). C# and Ruby on Rails developer on Army automated gate and access control systems. Provided Tier III field support, evaluated third-party SDKs, and built prototype applications to validate integration options at Army installations nationwide.
+
+Lead Software Engineer, Technology Industries Inc. (2014-2015). Solutions manager and lead engineer for FAA and Pentagon identity and access management projects. Built RESTful .NET web services, authored API documentation, and stood up Azure cloud environments for teaming partners.
+
+---
+
+EDUCATION AND AI ENGINEERING
+
+B.S. Computer Science, Summa Cum Laude, Limestone College, Gaffney SC.
+
+Current AI engineering focus: Microsoft Semantic Kernel orchestration framework, Anthropic Claude SDK, OpenAI embeddings (text-embedding-3-small), RAG pipeline architecture (chunking, vector embedding, cosine similarity retrieval, prompt injection, structured JSON generation), prompt engineering, IPromptRepository pattern for prompt management, BackgroundService pattern for startup embedding, in-memory vector store with manual cosine similarity. Building toward Azure AI Search integration and multi-agent orchestration patterns.
