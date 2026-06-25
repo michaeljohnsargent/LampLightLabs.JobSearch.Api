@@ -2,11 +2,13 @@ using System.Text.RegularExpressions;
 using LampLightLabs.JobSearch.Api.Models.Rag;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LampLightLabs.JobSearch.Api.Controllers;
 
 [Route("api/rag")]
 [ApiController]
+[EnableRateLimiting("ai-token-bucket")]
 public class RagController : ControllerBase
 {
     private readonly IRagMatchService _ragMatchService;

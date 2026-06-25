@@ -1,6 +1,7 @@
 using LampLightLabs.JobSearch.Api.Models.Ai;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LampLightLabs.JobSearch.Api.Controllers.V2
 {
@@ -9,6 +10,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
     /// </summary>
     [Route("api/v2/ai")]
     [ApiController]
+    [EnableRateLimiting("ai-token-bucket")]
     public class AiController : ControllerBase
     {
         private readonly IClaudeChatService _claudeChatService;
