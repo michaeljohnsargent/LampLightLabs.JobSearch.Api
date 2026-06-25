@@ -4,6 +4,7 @@ using LampLightLabs.JobSearch.Api.Models.V2;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,6 +21,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
     [ApiVersion(2)]
     [Route("api/v{v:apiVersion}/[controller]")]
     [ApiController]
+    [EnableRateLimiting("api-sliding")]
     public class ApplicationsController : ControllerBase
     {
         private readonly ICsvReaderService _csv;

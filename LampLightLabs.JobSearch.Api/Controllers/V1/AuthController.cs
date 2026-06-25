@@ -2,6 +2,7 @@ using Asp.Versioning;
 using LampLightLabs.JobSearch.Api.Models.Auth;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LampLightLabs.JobSearch.Api.Controllers.V1;
 
@@ -45,6 +46,7 @@ public class AuthController : ControllerBase
     ///
     /// </remarks>
     [HttpPost("token")]
+    [EnableRateLimiting("auth-fixed")]
     [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public IActionResult GetToken([FromBody] LoginRequest request)

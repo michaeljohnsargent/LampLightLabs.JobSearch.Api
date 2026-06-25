@@ -1,6 +1,7 @@
 ﻿using Asp.Versioning;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LampLightLabs.JobSearch.Api.Controllers.V1
 {
@@ -10,6 +11,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V1
     [ApiVersion(1)]
     [Route("api/v{v:apiVersion}/[controller]")]
     [ApiController]
+    [EnableRateLimiting("api-sliding")]
     public class ApplicationsController : ControllerBase
     {
         private readonly ICsvReaderService _csv;

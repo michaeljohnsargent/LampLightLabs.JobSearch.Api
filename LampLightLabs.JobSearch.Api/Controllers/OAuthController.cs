@@ -1,6 +1,7 @@
 ﻿using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.ComponentModel;
 
 namespace LampLightLabs.JobSearch.Api.Controllers
@@ -19,6 +20,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers
         }
 
         [HttpPost("token")]
+        [EnableRateLimiting("auth-fixed")]
         public IActionResult GetToken([FromForm] Models.Auth.OAuthTokenRequest request)
         {
             if (request.GrantType != "client_credentials")

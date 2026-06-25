@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -105,6 +107,94 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ResumeVectorStoreS
 builder.Services.AddSingleton<IPromptRepository, PromptRepository>();
 builder.Services.AddScoped<IRagMatchService, RagMatchService>();
 
+// CORS
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? [];
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("ViteDev", policy =>
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
+
+// Partition by authenticated user identity, falling back to remote IP for anonymous requests.
+static string GetPartitionKey(HttpContext ctx)
+{
+    var user = ctx.User.Identity?.Name
+        ?? ctx.User.FindFirst("client_id")?.Value;
+    if (!string.IsNullOrEmpty(user))
+        return $"user:{user}";
+
+    var address = ctx.Connection.RemoteIpAddress;
+    if (address?.IsIPv4MappedToIPv6 == true)
+        address = address.MapToIPv4();
+
+    return $"ip:{address?.ToString() ?? "unknown"}";
+}
+
+// Rate Limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture);
+        }
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsync("Too Many Requests. Please retry later.", cancellationToken);
+    };
+
+    var cfg = builder.Configuration.GetSection("RateLimiting");
+
+    // Fixed window: brute-force protection on token issuance endpoints.
+    options.AddPolicy("auth-fixed", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetPartitionKey(ctx),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit          = cfg.GetValue("FixedWindow:PermitLimit", 10),
+                Window               = TimeSpan.FromSeconds(cfg.GetValue("FixedWindow:WindowSeconds", 60)),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit           = 0,
+                AutoReplenishment    = true
+            }));
+
+    // Sliding window: smooth general throttling for data endpoints.
+    options.AddPolicy("api-sliding", ctx =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: GetPartitionKey(ctx),
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit          = cfg.GetValue("SlidingWindow:PermitLimit", 100),
+                Window               = TimeSpan.FromSeconds(cfg.GetValue("SlidingWindow:WindowSeconds", 60)),
+                SegmentsPerWindow    = cfg.GetValue("SlidingWindow:SegmentsPerWindow", 4),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit           = 0
+            }));
+
+    // Token bucket: metered budget for expensive LLM inference endpoints.
+    options.AddPolicy("ai-token-bucket", ctx =>
+        RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey: GetPartitionKey(ctx),
+            factory: _ => new TokenBucketRateLimiterOptions
+            {
+                TokenLimit           = cfg.GetValue("TokenBucket:TokenLimit", 5),
+                TokensPerPeriod      = cfg.GetValue("TokenBucket:TokensPerPeriod", 2),
+                ReplenishmentPeriod  = TimeSpan.FromSeconds(cfg.GetValue("TokenBucket:ReplenishmentPeriodSeconds", 30)),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit           = cfg.GetValue("TokenBucket:QueueLimit", 2),
+                AutoReplenishment    = true
+            }));
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -120,8 +210,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<NewlineSanitizingMiddleware>();
 app.UseHttpsRedirection();
+app.UseRouting();           // explicit — UseRateLimiter must see endpoint metadata before MapControllers
+app.UseCors("ViteDev");    // before auth so browser preflight OPTIONS is not blocked by auth
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();      // after auth so HttpContext.User is populated for partition key
 app.MapControllers();
 app.Run();
 

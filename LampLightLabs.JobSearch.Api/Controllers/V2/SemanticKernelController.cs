@@ -1,6 +1,7 @@
 using LampLightLabs.JobSearch.Api.Models.Sk;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LampLightLabs.JobSearch.Api.Controllers.V2
 {
@@ -10,6 +11,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers.V2
     /// </summary>
     [Route("api/v2/sk")]
     [ApiController]
+    [EnableRateLimiting("ai-token-bucket")]
     public class SemanticKernelController : ControllerBase
     {
         private readonly ISemanticKernelChatService _semanticKernelChatService;

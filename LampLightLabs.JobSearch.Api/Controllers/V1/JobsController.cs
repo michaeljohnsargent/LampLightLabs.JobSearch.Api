@@ -2,6 +2,7 @@
 using LampLightLabs.JobSearch.Api.Models;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LampLightLabs.JobSearch.Api.Controllers
 {
@@ -11,6 +12,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers
     [ApiVersion(1)]
     [Route("api/v{v:apiVersion}/[controller]")]
     [ApiController]
+    [EnableRateLimiting("api-sliding")]
     public class JobsController : ControllerBase
     {
         private readonly JobStore _jobStore;
