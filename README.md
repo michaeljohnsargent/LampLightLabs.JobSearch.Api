@@ -32,7 +32,10 @@ Two tests in `RaceConditionDemoTests` demonstrate race condition behavior and it
 **8. Semantic Kernel Integration (Exercise)**
 `POST /api/v2/sk/chat` accepts a JSON body with a `prompt` field and forwards it to an OpenAI chat completion model through Microsoft Semantic Kernel's OpenAI connector, returning the model's text response. `ISemanticKernelChatService` builds and wraps the Semantic Kernel `Kernel` behind an interface - the same pattern used for `IClaudeChatService` - so the controller and its tests have no direct dependency on Semantic Kernel or OpenAI. This mirrors a real-world scenario where an application swaps or runs multiple LLM orchestration frameworks side by side. The API key is configured under `OpenAI:ApiKey` in `appsettings.json` and overridden locally via .NET user secrets - it is never committed.
 
-**9. RAG Pipeline (Exercise)**
+**9. CORS and Rate Limiting (Exercise)**
+A `ViteDev` CORS policy allows `http://localhost:5173` (the Vite dev server default) to make cross-origin requests, with any method and header permitted so the React frontend can send `Authorization`, `Content-Type`, and `Idempotency-Key` preflight checks without being blocked by the browser. Three named rate limiting policies use ASP.NET Core 8's built-in `AddRateLimiter` (no additional NuGet packages): a fixed window on token issuance endpoints to prevent credential stuffing, a sliding window on general data endpoints for smooth per-user throttling, and a token bucket on LLM inference endpoints to meter expensive AI calls. All three policies partition by authenticated user identity (`name` or `client_id` claim) with a fallback to remote IP for anonymous requests, so each caller gets an independent counter. Rejected requests return HTTP 429 with a `Retry-After` header. Limits are config-driven under `Cors` and `RateLimiting` in `appsettings.json`. The middleware order is intentional: `UseRouting` is called explicitly before `UseRateLimiter` so endpoint metadata (the `[EnableRateLimiting]` attributes) is resolved before the rate limiter runs; `UseCors` comes before `UseAuthentication` so browser preflight OPTIONS requests are not challenged for credentials; `UseRateLimiter` comes after `UseAuthorization` so `HttpContext.User` is populated when the partition key is computed.
+
+**10. RAG Pipeline (Exercise)**
 `POST /api/rag/match` accepts the full text of a job description and returns a structured match analysis against the resume: a match score (0–100), a 2–3 sentence narrative, identified strengths, gaps, and the specific resume chunks that informed the analysis. Input sanitization happens in two layers: `NewlineSanitizingMiddleware` runs first and replaces literal `\r\n`, `\r`, and `\n` characters in the raw JSON body with spaces before the JSON deserializer sees them (unescaped newlines inside a JSON string value are illegal per RFC 8259 and would cause a parse error before the request reaches any controller), then the controller strips non-printable control characters, normalizes any remaining line endings, collapses horizontal whitespace runs, and caps consecutive blank lines at two, so the LLM always receives clean input regardless of how the client serialized the text. At startup, `ResumeVectorStoreService` (a `BackgroundService`) splits the resume into sections, embeds each one using OpenAI's `text-embedding-3-small` model, and holds the vectors in memory. On each request, the sanitized job description is embedded, cosine similarity retrieves the top-3 most relevant resume sections, and those sections are injected into a structured prompt sent to Claude via the Anthropic API. Claude returns a raw JSON object; the service deserializes it and attaches `retrievedContext` from the vector store rather than trusting the model to report which chunks it used. `IPromptRepository` owns all prompt construction — system instructions and user message assembly are separated from orchestration logic so prompts can be reviewed, swapped, or tested independently. Requires `OpenAI:ApiKey` (embeddings) and `Anthropic:ApiKey` (generation) set in user secrets.
 
 ---
@@ -140,6 +143,42 @@ Machine-to-machine auth. A client application authenticates with its client_id a
 - Request format: `application/x-www-form-urlencoded` per the OAuth 2.0 spec
 - Clients configured in `appsettings.json` under `OAuthClients`
 - Token claims: `sub` (clientId), `client_id`, `scope`, `jti`, `exp`
+
+---
+
+## CORS and Rate Limiting
+
+### CORS
+
+The `ViteDev` policy is registered via `AddCors` and applied globally with `UseCors("ViteDev")`. It permits only `http://localhost:5173` and allows any method and header.
+
+Allowed origins are config-driven under `Cors:AllowedOrigins` in `appsettings.json`, so additional origins (e.g. a staging frontend) can be added without a code change.
+
+### Rate Limiting
+
+Three named policies are registered via `AddRateLimiter` using ASP.NET Core 8's built-in rate limiting — no additional packages required.
+
+| Policy | Algorithm | Default limits | Applied to |
+|---|---|---|---|
+| `auth-fixed` | Fixed window | 10 req / 60s, no queue | `POST /api/v1/auth/token`, `POST /oauth/token` |
+| `api-sliding` | Sliding window | 100 req / 60s, 4 segments, no queue | All Applications and Jobs endpoints |
+| `ai-token-bucket` | Token bucket | Burst 5, +2 per 30s, queue 2 | `/api/v2/ai/chat`, `/api/v2/sk/chat`, `/api/rag/match` |
+
+**Partition key:** Each policy partitions by authenticated user identity (`name` claim for user JWTs, `client_id` claim for client-credential JWTs). Anonymous requests fall back to remote IP. This means each caller gets an independent counter — a user hitting the limit does not affect any other user.
+
+**Rejected responses:** HTTP 429 with a plain-text body and a `Retry-After` header set to the remaining window seconds.
+
+**Configuration:** All limits live under `RateLimiting` in `appsettings.json` and are read at startup with in-code defaults as fallback. Tuning a limit is a config change with no rebuild required.
+
+**Middleware order:**
+```
+UseRouting()        ← explicit; UseRateLimiter needs endpoint metadata resolved first
+UseCors()           ← before auth; preflight OPTIONS must not require credentials
+UseAuthentication()
+UseAuthorization()
+UseRateLimiter()    ← after auth; HttpContext.User is populated for partition key
+MapControllers()
+```
 
 ---
 
@@ -309,10 +348,12 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── RagControllerTests.cs               - 9 tests: validation, input sanitization (control chars, whitespace, newlines), response shaping, service passthrough (IRagMatchService mocked)
 ├── RagMatchServiceTests.cs             - 7 tests: JSON parsing, RetrievedContext injection, orchestration wiring (all dependencies mocked)
 ├── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
+├── CorsTests.cs                        - 3 integration tests: allowed origin returns ACAO header, disallowed origin omits it, OPTIONS preflight returns 204
+├── RateLimitingTests.cs                - 4 integration tests: fixed window 429 + Retry-After, sliding window 429, token bucket 429 (fresh factory per test for clean partition state)
 ├── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken by design), race condition with lock (fixed)
 └── SemanticKernelControllerTests.cs    - 4 tests: prompt validation, response shaping, service passthrough (ISemanticKernelChatService mocked)
 
-Total: 109 tests passing
+Total: 116 tests (115 passing; RaceConditionDemoTests.Counter_WithoutLock_ProducesUnpredictableResults is intentionally broken by design)
 ```
 
 ---
@@ -398,6 +439,14 @@ The embedding model (`text-embedding-3-small`) and chat model (`gpt-4o-mini`) ar
 **RetrievedContext injected in the service, not by the model** - The chunks returned by the vector store are attached to the response in `RagMatchService`, not sourced from the LLM output. Claude is asked only for `matchScore`, `summary`, `strengths`, and `gaps`. This prevents hallucination in the `retrievedContext` field and keeps the record of which chunks were retrieved authoritative and deterministic.
 
 **System prompt separated from user message** - `IClaudeChatService` was extended with a `SendPromptAsync(string systemPrompt, string userMessage, CancellationToken ct)` overload that maps to the Anthropic API's separate `system` and `messages` parameters. The existing single-string overload is unchanged and all prior tests continue to pass. Mixing system instructions into the user message works, but the Anthropic API accepts them separately and Claude responds more reliably when the distinction is explicit.
+
+**Config-driven rate limiting limits** - All rate limit values (`PermitLimit`, `WindowSeconds`, `TokenLimit`, etc.) are read from `appsettings.json` at startup with hard-coded fallbacks. Tuning a limit in production is a config change — no rebuild, no redeploy of binaries. This also makes integration tests straightforward: each test overrides the limit to 2 via in-memory configuration so the limit is hit with just 3 requests, without touching production values.
+
+**Partition key falls back to IP for anonymous requests** - The rate limiter partition key checks `HttpContext.User.Identity.Name` (user JWT) and then the `client_id` claim (OAuth client JWT). If neither is present (anonymous request), it falls back to the remote IP address with IPv6-mapped IPv4 normalized for consistent key strings. This gives each authenticated caller their own independent counter while still throttling unauthenticated abuse by IP. The fallback is placed in a local static function (`GetPartitionKey`) so all three policies share the same logic with no duplication.
+
+**UseRouting called explicitly** - Without an explicit `app.UseRouting()` call before `app.UseRateLimiter()`, ASP.NET Core 8 would implicitly insert routing at the `app.MapControllers()` call site — which comes *after* the rate limiter in the pipeline. The rate limiter would then run before endpoint metadata is resolved, making `[EnableRateLimiting]` attributes invisible to it and causing all requests to be treated as unrated. Adding the explicit call makes the ordering unambiguous and matches the ASP.NET Core documentation recommendation.
+
+**Three policies, three endpoint types** - A single global limiter would either be too strict for high-frequency data reads or too lenient for expensive AI calls. Three named policies match three cost profiles: auth endpoints get a tight fixed window to resist credential stuffing; general data endpoints get a sliding window to smooth out burst traffic while allowing sustained use; LLM endpoints get a token bucket that allows a small burst (5 tokens) but replenishes slowly (+2 per 30s), reflecting the actual cost of an inference call. `[EnableRateLimiting]` attributes are placed at the controller level (so all current and future actions inherit the policy) except on the token-issuance actions, where action-level placement leaves room for non-auth actions on those controllers later.
 
 **Two-layer input sanitization** - Sanitizing a job description that a client pastes as raw text requires two separate passes at different points in the pipeline. `NewlineSanitizingMiddleware` handles what the JSON parser would reject before the controller is ever called: literal `\n` and `\r` characters inside a JSON string value are illegal per RFC 8259 — the parser returns a 400 long before model binding or controller logic runs. The middleware reads the raw body, replaces those characters with spaces, and rewrites the stream. `RagController` handles what is legal JSON but still dirty for LLM input: non-printable control characters (`\x00`–`\x1F`, excluding whitespace), excess whitespace runs, and blank line clusters. The sanitized value is re-validated after cleaning so a string composed entirely of control characters still returns 400. This separation is intentional: the middleware fixes a protocol-level violation; the controller fixes application-level hygiene. Mixing them in one place would either put JSON wire-format concerns in a controller or put application semantics in infrastructure.
 
