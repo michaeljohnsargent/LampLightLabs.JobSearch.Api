@@ -4,9 +4,26 @@ A personal ASP.NET Core Web API project built by **Michael Sargent** to dust off
 
 ---
 
+## Table of Contents
+
+- [What This Project Does](#what-this-project-does)
+- [Endpoints](#endpoints)
+- [Authentication](#authentication)
+- [CORS and Rate Limiting](#cors-and-rate-limiting)
+- [API Versioning](#api-versioning)
+- [Async Job Pattern](#async-job-pattern---how-it-works)
+- [RAG Pipeline](#rag-pipeline---how-it-works)
+- [Project Structure](#project-structure)
+- [Tech Stack](#tech-stack)
+- [Running Locally](#running-locally)
+- [Key Design Decisions](#key-design-decisions)
+- [Author](#author)
+
+---
+
 ## What This Project Does
 
-This project serves five purposes:
+This project serves ten purposes:
 
 **1. Job Search Pipeline Tracker**
 The `ApplicationsController` reads a CSV file containing job applications and their current pipeline states, exposing that data via a REST endpoint. It uses CsvHelper to correctly handle quoted multi-line fields - a real-world parsing challenge solved during development.
