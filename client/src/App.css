@@ -1,3 +1,52 @@
+/* ── Theme tokens ─────────────────────────────────────────────────── */
+
+[data-theme="professional"] {
+  --bg:           #1a1a2e;
+  --surface:      #252540;
+  --border:       #3a3a60;
+  --text:         #dde1f0;
+  --muted:        #8890b0;
+  --accent:       #4f8ef7;
+  --accent-hover: #3a7be0;
+  --font:         Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --radius:       6px;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+[data-theme="bold"] {
+  --bg:           #05051a;
+  --surface:      #0e0e2a;
+  --border:       #1e1e4a;
+  --text:         #f0f0ff;
+  --muted:        #9b59d0;
+  --accent:       #00e5ff;
+  --accent-hover: #00b8d4;
+  --font:         Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --radius:       8px;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+[data-theme="minimal"] {
+  --bg:           #000000;
+  --surface:      #080808;
+  --border:       #1e1e1e;
+  --text:         #e0e0e0;
+  --muted:        #555555;
+  --accent:       #e0e0e0;
+  --accent-hover: #ffffff;
+  --font:         'Courier New', Courier, monospace;
+  --radius:       0px;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+/* ── Layout ────────────────────────────────────────────────────────── */
+
 main {
   max-width: 760px;
   margin: 0 auto;
@@ -15,11 +64,43 @@ h1 {
 }
 
 .subtitle {
-  color: #888;
+  color: var(--muted);
   margin: 0;
 }
 
-/* ── Form ── */
+/* ── Theme switcher ────────────────────────────────────────────────── */
+
+.theme-switcher {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.theme-btn {
+  padding: 0.3rem 0.85rem;
+  font-size: 0.8rem;
+  font-family: var(--font);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.theme-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.theme-btn--active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Form ──────────────────────────────────────────────────────────── */
 
 form {
   display: flex;
@@ -35,19 +116,19 @@ label {
 textarea {
   width: 100%;
   padding: 0.75rem;
-  font-family: inherit;
+  font-family: var(--font);
   font-size: 0.95rem;
-  border: 1px solid #444;
-  border-radius: 6px;
-  background: #1a1a1a;
-  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
   resize: vertical;
   box-sizing: border-box;
 }
 
 textarea:focus {
   outline: none;
-  border-color: #646cff;
+  border-color: var(--accent);
 }
 
 button[type='submit'] {
@@ -55,36 +136,38 @@ button[type='submit'] {
   padding: 0.6rem 1.4rem;
   font-size: 0.95rem;
   font-weight: 600;
-  border-radius: 6px;
-  border: none;
-  background: #646cff;
-  color: #fff;
+  font-family: var(--font);
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 button[type='submit']:hover:not(:disabled) {
-  background: #535bf2;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 button[type='submit']:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* ── Error ── */
+/* ── Error ─────────────────────────────────────────────────────────── */
 
 .error-box {
   margin-top: 1.5rem;
   padding: 0.75rem 1rem;
   border: 1px solid #f87171;
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: rgba(248, 113, 113, 0.1);
   color: #f87171;
   font-size: 0.9rem;
 }
 
-/* ── Results ── */
+/* ── Results ───────────────────────────────────────────────────────── */
 
 .results {
   margin-top: 2.5rem;
@@ -95,7 +178,7 @@ button[type='submit']:disabled {
   align-items: baseline;
   gap: 0.2rem;
   padding: 0.5rem 1.25rem;
-  border-radius: 8px;
+  border-radius: var(--radius);
   margin-bottom: 2rem;
   font-weight: 700;
 }
@@ -118,7 +201,7 @@ button[type='submit']:disabled {
   font-size: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #888;
+  color: var(--muted);
   margin-bottom: 0.5rem;
 }
 
@@ -146,13 +229,5 @@ button[type='submit']:disabled {
 @media (max-width: 560px) {
   .result-columns {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (prefers-color-scheme: light) {
-  textarea {
-    background: #fafafa;
-    border-color: #ccc;
-    color: #213547;
   }
 }
