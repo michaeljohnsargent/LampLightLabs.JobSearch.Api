@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import './App.css'
 
-const API_URL = 'https://lamplightlabs-api.azurewebsites.net/api/v2/rag/match'
+const API_URL = 'https://lamplightlabs-api.azurewebsites.net/api/rag/match'
 
 interface RagMatchResponse {
   matchScore: number
