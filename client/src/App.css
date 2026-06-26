@@ -1,0 +1,158 @@
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+h1 {
+  font-size: 2rem;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  color: #888;
+  margin: 0;
+}
+
+/* ── Form ── */
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+textarea {
+  width: 100%;
+  padding: 0.75rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #1a1a1a;
+  color: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+button[type='submit'] {
+  align-self: flex-start;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: #646cff;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button[type='submit']:hover:not(:disabled) {
+  background: #535bf2;
+}
+
+button[type='submit']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Error ── */
+
+.error-box {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #f87171;
+  border-radius: 6px;
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+  font-size: 0.9rem;
+}
+
+/* ── Results ── */
+
+.results {
+  margin-top: 2.5rem;
+}
+
+.score-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  font-weight: 700;
+}
+
+.score-number {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.score-denom {
+  font-size: 1.2rem;
+  opacity: 0.75;
+}
+
+.score-high { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid #34d39960; }
+.score-mid  { background: rgba(251, 191, 36, 0.15);  color: #fbbf24; border: 1px solid #fbbf2460; }
+.score-low  { background: rgba(248, 113, 113, 0.15); color: #f87171; border: 1px solid #f8717160; }
+
+.result-section h2 {
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  margin-bottom: 0.5rem;
+}
+
+.result-section p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.result-section ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.8;
+}
+
+.result-section {
+  margin-bottom: 1.75rem;
+}
+
+.result-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 560px) {
+  .result-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  textarea {
+    background: #fafafa;
+    border-color: #ccc;
+    color: #213547;
+  }
+}
