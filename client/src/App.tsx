@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
+import ThemeSwitcher, { type Theme } from './ThemeSwitcher'
 
 const API_URL = 'https://lamplightlabs-api.azurewebsites.net/api/rag/match'
 
@@ -23,10 +24,15 @@ function ScoreBadge({ score }: { score: number }) {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState<Theme>('bold')
   const [jobDescription, setJobDescription] = useState('')
   const [result, setResult] = useState<RagMatchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -61,6 +67,7 @@ export default function App() {
         <p className="subtitle">
           Paste a job description to see how well your resume matches.
         </p>
+        <ThemeSwitcher theme={theme} onThemeChange={setTheme} />
       </header>
 
       <form onSubmit={handleSubmit}>
