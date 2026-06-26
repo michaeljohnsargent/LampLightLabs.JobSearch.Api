@@ -1,0 +1,8 @@
+### Test AI Chat
+POST https://lamplightlabs-api.azurewebsites.net/api/v2/ai/chat
+Content-Type: application/json
+X-Api-Key: LampLightLabs-ApiKey-2026-Prod
+
+{
+  "prompt": "Hello, are you working?"
+}
