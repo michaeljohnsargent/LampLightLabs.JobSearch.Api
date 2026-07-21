@@ -6,8 +6,15 @@ namespace LampLightLabs.JobSearch.Api.Services
     /// <summary>
     /// In-memory store for tracking background job records.
     /// Thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>.
+    /// Registered Singleton in <c>Program.cs</c> — safe here specifically because a
+    /// <c>ConcurrentDictionary</c> is designed for concurrent access from a single
+    /// shared instance, unlike <see cref="Data.JobSearchDbContext"/>, which is not
+    /// thread-safe and must be Scoped instead (see <see cref="EfJobStore"/>).
+    /// Implements <see cref="IJobStore"/> explicitly so this class keeps its original
+    /// synchronous public API (existing tests call it directly) while still satisfying
+    /// the async interface that <c>JobsController</c> depends on.
     /// </summary>
-    public class JobStore
+    public class JobStore : IJobStore
     {
         private readonly ConcurrentDictionary<string, JobRecord> _jobs = new();
 
@@ -39,6 +46,20 @@ namespace LampLightLabs.JobSearch.Api.Services
         {
             if (_jobs.TryGetValue(jobId, out var job))
                 update(job);
+        }
+
+        // IJobStore explicit implementation — thin async wrappers around the sync
+        // methods above. Explicit (rather than public async methods with different
+        // names) so the class's original sync surface — the one JobStoreTests.cs
+        // exercises directly — is completely unchanged.
+        Task<JobRecord> IJobStore.CreateJobAsync() => Task.FromResult(CreateJob());
+
+        Task<JobRecord?> IJobStore.GetJobAsync(string jobId) => Task.FromResult(GetJob(jobId));
+
+        Task IJobStore.UpdateJobAsync(string jobId, Action<JobRecord> update)
+        {
+            UpdateJob(jobId, update);
+            return Task.CompletedTask;
         }
     }
 }

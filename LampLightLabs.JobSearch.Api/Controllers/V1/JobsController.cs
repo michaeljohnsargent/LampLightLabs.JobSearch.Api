@@ -1,8 +1,9 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using LampLightLabs.JobSearch.Api.Models;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LampLightLabs.JobSearch.Api.Controllers
 {
@@ -15,21 +16,32 @@ namespace LampLightLabs.JobSearch.Api.Controllers
     [EnableRateLimiting("api-sliding")]
     public class JobsController : ControllerBase
     {
-        private readonly JobStore _jobStore;
+        private readonly IJobStore _jobStore;
         private readonly ICsvReaderService _csv;
         private readonly IWebHostEnvironment _env;
+        private readonly IServiceScopeFactory _scopeFactory;
 
         /// <summary>
         /// Required constructor that accepts dependencies via dependency injection.
         /// </summary>
-        /// <param name="jobStore">The in-memory job store for tracking job records.</param>
+        /// <param name="jobStore">The job store for tracking job records — EF Core/Postgres-backed
+        /// in production (see <see cref="EfJobStore"/>), swappable for the in-memory
+        /// <see cref="JobStore"/> via the <c>Program.cs</c> DI registration.</param>
         /// <param name="csv">The CSV reader service for reading CSV files.</param>
         /// <param name="env">The web hosting environment.</param>
-        public JobsController(JobStore jobStore, ICsvReaderService csv, IWebHostEnvironment env)
+        /// <param name="scopeFactory">Used to create a fresh DI scope for the background
+        /// job (see <see cref="ProcessApplicationsAsync"/>) rather than reusing this
+        /// controller's request-scoped services after the request has returned.</param>
+        public JobsController(
+            IJobStore jobStore,
+            ICsvReaderService csv,
+            IWebHostEnvironment env,
+            IServiceScopeFactory scopeFactory)
         {
             _jobStore = jobStore;
             _csv = csv;
             _env = env;
+            _scopeFactory = scopeFactory;
         }
 
         // POST api/jobs/start
@@ -40,9 +52,11 @@ namespace LampLightLabs.JobSearch.Api.Controllers
         /// </summary>
         /// <returns>An Accepted response containing the job ID and status.</returns>
         [HttpPost("start")]
-        public IActionResult StartJob()
+        public async Task<IActionResult> StartJob()
         {
-            var job = _jobStore.CreateJob();
+            // Runs and completes before the response is returned, so it's safe to use
+            // this controller's own request-scoped _jobStore here.
+            var job = await _jobStore.CreateJobAsync();
             var cts = new CancellationTokenSource();
             CancellationToken token = cts.Token;
 
@@ -60,9 +74,9 @@ namespace LampLightLabs.JobSearch.Api.Controllers
         /// <param name="jobId">The ID of the job to retrieve the status for.</param>
         /// <returns>The status of the specified job.</returns>
         [HttpGet("{jobId}/status")]
-        public IActionResult GetStatus(string jobId)
+        public async Task<IActionResult> GetStatus(string jobId)
         {
-            var job = _jobStore.GetJob(jobId);
+            var job = await _jobStore.GetJobAsync(jobId);
             if (job == null)
                 return NotFound($"Job {jobId} not found.");
 
@@ -80,10 +94,21 @@ namespace LampLightLabs.JobSearch.Api.Controllers
         /// Reads and processes applications from a CSV file, updating the job status
         /// accordingly. This method simulates long-running work by introducing a delay
         /// and then reading a CSV file to count the number of applications processed.
-        /// It updates the job record in the in-memory store with the results or any
-        /// errors encountered during processing. The delay is cancellation-aware, and
-        /// cancellation is checked before CSV processing begins so the operation exits
-        /// cleanly at a safe boundary.
+        /// The delay is cancellation-aware, and cancellation is checked again before CSV
+        /// processing starts so the operation exits cleanly at a safe boundary.
+        ///
+        /// Runs detached from the HTTP request that started it (fired via
+        /// <c>Task.Run</c>, not awaited). By the time this executes, ASP.NET Core may
+        /// already have disposed the request's DI scope — and with it, this
+        /// controller's own <c>_jobStore</c>/<c>_csv</c> fields, since both are
+        /// registered Scoped and the EF Core-backed store holds a DbContext that isn't
+        /// safe to touch after its scope is disposed. Using those fields directly here
+        /// would risk an <see cref="ObjectDisposedException"/> on the DbContext, or
+        /// worse, silent corruption if the request scope happens to still be alive.
+        /// Instead, a fresh scope is created explicitly so this background work gets
+        /// its own Scoped instances with a lifetime tied to the work itself rather than
+        /// to the request that kicked it off — the standard fix for fire-and-forget
+        /// work in ASP.NET Core (see Microsoft's docs on avoiding captive dependencies).
         /// </summary>
         /// <param name="jobId">The ID of the job to process applications for.</param>
         /// <param name="cancellationToken">Token used to cancel the operation cleanly
@@ -91,7 +116,11 @@ namespace LampLightLabs.JobSearch.Api.Controllers
         /// <returns>A task representing the asynchronous operation.</returns>
         private async Task ProcessApplicationsAsync(string jobId, CancellationToken cancellationToken)
         {
-            _jobStore.UpdateJob(jobId, j => j.Status = JobStatus.Processing);
+            using var scope = _scopeFactory.CreateScope();
+            var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
+            var csv = scope.ServiceProvider.GetRequiredService<ICsvReaderService>();
+
+            await jobStore.UpdateJobAsync(jobId, j => j.Status = JobStatus.Processing);
 
             try
             {
@@ -101,9 +130,9 @@ namespace LampLightLabs.JobSearch.Api.Controllers
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TestData", "applications.csv");
-                var rows = _csv.ReadCsv(filePath).ToList();
+                var rows = csv.ReadCsv(filePath).ToList();
 
-                _jobStore.UpdateJob(jobId, j =>
+                await jobStore.UpdateJobAsync(jobId, j =>
                 {
                     j.Status = JobStatus.Complete;
                     j.Result = $"Processed {rows.Count} applications successfully.";
@@ -112,7 +141,7 @@ namespace LampLightLabs.JobSearch.Api.Controllers
             }
             catch (Exception ex)
             {
-                _jobStore.UpdateJob(jobId, j =>
+                await jobStore.UpdateJobAsync(jobId, j =>
                 {
                     j.Status = JobStatus.Failed;
                     j.Result = $"Error: {ex.Message}";
