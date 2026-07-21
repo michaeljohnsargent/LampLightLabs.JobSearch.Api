@@ -11,7 +11,7 @@ A personal ASP.NET Core 8 Web API used to practice production-relevant backend p
 ```
 dotnet build LampLightLabs.JobSearch.Api.sln          # build solution
 dotnet run --project LampLightLabs.JobSearch.Api      # run API (Swagger at /swagger in Development)
-dotnet test                                            # run all tests (115 passing; 1 intentionally broken race condition demo)
+dotnet test                                            # run all tests (121 passing; 1 intentionally broken race condition demo)
 dotnet test --filter "FullyQualifiedName~ClassName"           # run one test class
 dotnet test --filter "FullyQualifiedName~ClassName.MethodName" # run one test method
 ```
@@ -34,11 +34,11 @@ Swagger doesn't auto-detect `[Authorize]` for the UI padlock; `Filters/BasicAuth
 
 **Strategy Pattern for file reading**: `ICsvReaderService` is the contract; `CsvReaderService` (production, handles RFC 4180 multi-line quoted fields via CsvHelper) and `JsonReaderService` (alternative) are interchangeable. Swapping implementations is a one-line change in `Program.cs`'s DI registration — controllers and callers are untouched. `CsvReaderServiceTests` has a proof test asserting both implementations return identical results from equivalent data.
 
-**Async job pattern** (`Controllers/V1/JobsController.cs` + `Services/JobStore.cs`): `POST /api/v1/jobs/start` returns `202 Accepted` with a job ID immediately; work runs in the background and `GET /api/v1/jobs/{jobId}/status` polls for completion. `JobStore` is a singleton `ConcurrentDictionary` for thread-safe state. The background task takes a `CancellationToken`, used in a cancellation-aware `Task.Delay` and checked again before CSV processing starts, so cancellation lands at a safe boundary rather than mid-work.
+**Async job pattern** (`Controllers/V1/JobsController.cs` + `Services/IJobStore.cs`): `POST /api/v1/jobs/start` returns `202 Accepted` with a job ID immediately; work runs in the background and `GET /api/v1/jobs/{jobId}/status` polls for completion. Job persistence is behind `IJobStore` (Strategy Pattern, same shape as `ICsvReaderService`): `JobStore` is the original singleton `ConcurrentDictionary` implementation, `EfJobStore` is the production-registered EF Core/Postgres implementation, registered Scoped since `DbContext` isn't thread-safe. Because `StartJob` fires the background task via `Task.Run` without awaiting it, that work can outlive the HTTP request's DI scope — `JobsController` injects `IServiceScopeFactory` and creates a fresh scope inside the background method rather than reusing its own request-scoped services, avoiding a disposed-`DbContext` bug. The background task also takes a `CancellationToken`, used in a cancellation-aware `Task.Delay` and checked again before CSV processing starts, so cancellation lands at a safe boundary rather than mid-work.
 
 **Characterization testing**: `StatusCategorizerService` was extracted from a private controller method and pinned with characterization tests (`StatusCategorizerCharacterizationTests`) *before* any refactor — tests freeze current behavior (including at least one known logic gap, documented inline) rather than intended behavior, per Michael Feathers' approach. Don't "fix" frozen behavior as a side effect of unrelated changes; that gap is intentionally deferred to its own PR.
 
-**Config**: `Jwt`, `ApiKey`, `BasicAuth`, and `OAuthClients` sections live in `appsettings.json` (and `appsettings.Development.json`). All services are registered against interfaces in `Program.cs` (`AddScoped`/`AddSingleton`), making Moq-based unit testing straightforward.
+**Config**: `Jwt`, `ApiKey`, `BasicAuth`, `OAuthClients`, and `ConnectionStrings:Postgres` sections live in `appsettings.json` (and `appsettings.Development.json`). All services are registered against interfaces in `Program.cs` (`AddScoped`/`AddSingleton`), making Moq-based unit testing straightforward.
 
 ## Azure tooling
 

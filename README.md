@@ -29,7 +29,7 @@ This project serves ten purposes:
 The `ApplicationsController` reads a CSV file containing job applications and their current pipeline states, exposing that data via a REST endpoint. It uses CsvHelper to correctly handle quoted multi-line fields - a real-world parsing challenge solved during development.
 
 **2. Async Long-Running Job Pattern (Exercise)**
-The `JobsController` demonstrates a production-relevant API pattern: accepting a long-running request, returning a job ID immediately with `202 Accepted`, processing work asynchronously in the background, and exposing a polling endpoint the client can call to check job status. This pattern is common in compliance processing, batch operations, and file export workflows.
+The `JobsController` demonstrates a production-relevant API pattern: accepting a long-running request, returning a job ID immediately with `202 Accepted`, processing work asynchronously in the background, and exposing a polling endpoint the client can call to check job status. This pattern is common in compliance processing, batch operations, and file export workflows. Job records are persisted via EF Core against Postgres (`EfJobStore`), with the original in-memory implementation (`JobStore`) kept alongside it — both implement `IJobStore`, the same Strategy Pattern used for `ICsvReaderService` below, and swapping which one is registered in `Program.cs` is a one-line change. Moving to a Scoped `DbContext` surfaced a real DI-lifetime bug in the background task: it previously reused the controller's own injected store directly, which only worked because that store was Singleton. `JobsController` now injects `IServiceScopeFactory` and creates a fresh scope inside the background method, so fire-and-forget work gets its own Scoped instances instead of risking a disposed `DbContext` once the originating HTTP request's scope ends.
 
 **3. Authentication Showcase**
 Each endpoint in the project demonstrates a different authentication scheme: JWT Bearer, API Key, Basic Auth, and OAuth 2.0 Client Credentials. This mirrors real-world backend APIs where different consumers (users, services, integrations) require different auth patterns on different endpoints.
@@ -80,6 +80,8 @@ A `ViteDev` CORS policy allows `http://localhost:5173` (the Vite dev server defa
 |---|---|---|---|---|
 | POST | `/api/v1/jobs/start` | v1 | None | Starts a background job, returns job ID immediately |
 | GET | `/api/v1/jobs/{jobId}/status` | v1 | None | Polls the status of a running or completed job |
+
+> Job records are persisted via EF Core to Postgres (`EfJobStore`) in production. Requires a local Postgres instance and an applied migration — see **Running Locally**. Every other endpoint in this project works without Postgres running.
 
 ### AI
 | Method | Route | Auth | Description |
@@ -284,6 +286,8 @@ LampLightLabs.JobSearch.Api/
 │   └── BasicAuthHandler.cs             - Custom auth handler chained onto JWT scheme
 ├── Attributes/
 │   └── ApiKeyAuthAttribute.cs          - IAuthorizationFilter for API key validation
+├── Data/
+│   └── JobSearchDbContext.cs           - EF Core DbContext for JobRecord (Postgres via Npgsql), registered Scoped
 ├── Controllers/
 │   ├── OAuthController.cs              - POST /oauth/token (outside versioning)
 │   ├── RagController.cs                - POST /api/rag/match (outside versioning)
@@ -346,7 +350,9 @@ LampLightLabs.JobSearch.Api/
 │   ├── IdempotencyCacheEntry.cs        - Cache entry: request hash, status code, response, timestamp
 │   ├── IStatusCategorizerService.cs    - Status categorization interface
 │   ├── StatusCategorizerService.cs     - Extracted from controller; covered by characterization tests
-│   └── JobStore.cs                     - Thread-safe in-memory job store
+│   ├── IJobStore.cs                    - Job store interface (Strategy Pattern contract)
+│   ├── JobStore.cs                     - Thread-safe in-memory implementation (Singleton-safe, ConcurrentDictionary-backed)
+│   └── EfJobStore.cs                   - EF Core/Postgres implementation (Scoped, production default)
 ├── TestData/
 │   └── applications.csv                - Live job search pipeline data
 └── Program.cs                          - DI registration and middleware
@@ -359,6 +365,7 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── OAuthTests.cs                       - 14 tests: GenerateClientToken, OAuthClientService, OAuthController, stats integration
 ├── CsvReaderServiceTests.cs            - CSV parsing tests + 5 JsonReaderService tests including Strategy Pattern proof
 ├── JobStoreTests.cs                    - JobStore concurrency and state tests
+├── EfJobStoreTests.cs                  - EfJobStore CRUD tests (EF Core InMemory provider) + Strategy Pattern parity test against JobStore
 ├── IdempotencyTests.cs                 - 4 integration tests: new key, replay, missing key, key reuse conflict
 ├── NewlineSanitizingMiddlewareTests.cs - 4 tests: \n, \r\n, \r replacement; non-JSON body passthrough (no ASP.NET hosting)
 ├── PromptRepositoryTests.cs            - 6 tests: system prompt content, user message assembly (no mocks)
@@ -370,7 +377,7 @@ LampLightLabs.JobSearch.Api.Tests/
 ├── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken by design), race condition with lock (fixed)
 └── SemanticKernelControllerTests.cs    - 4 tests: prompt validation, response shaping, service passthrough (ISemanticKernelChatService mocked)
 
-Total: 116 tests (115 passing; RaceConditionDemoTests.Counter_WithoutLock_ProducesUnpredictableResults is intentionally broken by design)
+Total: 122 tests (121 passing; RaceConditionDemoTests.Counter_WithoutLock_ProducesUnpredictableResults is intentionally broken by design)
 ```
 
 ---
@@ -382,6 +389,8 @@ Total: 116 tests (115 passing; RaceConditionDemoTests.Counter_WithoutLock_Produc
 - Asp.Versioning.Mvc 8.1.0
 - CsvHelper
 - Microsoft.AspNetCore.Authentication.JwtBearer 8.0.22
+- Npgsql.EntityFrameworkCore.PostgreSQL 8.0.11 (EF Core / PostgreSQL, Jobs endpoints)
+- Microsoft.EntityFrameworkCore.Design 8.0.11 (migration tooling, dev-time only)
 - Anthropic .NET SDK (Claude API - chat and RAG generation)
 - Microsoft Semantic Kernel 1.77.0 (OpenAI chat and text-embedding-3-small)
 - xUnit v3
@@ -413,6 +422,13 @@ dotnet user-secrets set "OpenAI:ApiKey" "sk-..."
 ```
 The embedding model (`text-embedding-3-small`) and chat model (`gpt-4o-mini`) are configured in `appsettings.json` under `OpenAI:EmbeddingModel` and `OpenAI:Model` — no secret required, change them there if needed. The placeholder API key values in `appsettings.json` are never used for live requests; they exist only to document the expected config shape.
 
+**Optional - EF Core / Postgres (Jobs endpoints):**
+`POST /api/v1/jobs/start` and `GET /api/v1/jobs/{jobId}/status` are backed by Postgres via EF Core (`EfJobStore`). Every other endpoint in this project works without it.
+1. Have a local Postgres instance running. The dev default in `appsettings.Development.json` targets `Host=localhost;Port=5432;Database=lamplightlabs_jobsearch;Username=postgres;Password=postgres` - override via user secrets or edit the connection string directly for a different local setup.
+2. Install the EF Core CLI tool once (global, one-time): `dotnet tool install --global dotnet-ef`
+3. Generate the initial migration: `dotnet ef migrations add InitialCreate --project LampLightLabs.JobSearch.Api`
+4. Apply it to create the schema: `dotnet ef database update --project LampLightLabs.JobSearch.Api`
+
 **Running Tests:**
 - Open Test Explorer (`Ctrl+E, T`)
 - Click Run All
@@ -437,9 +453,15 @@ The embedding model (`text-embedding-3-small`) and chat model (`gpt-4o-mini`) ar
 
 **Strategy Pattern (ICsvReaderService)** - `ICsvReaderService` defines the contract for reading structured data files. `CsvReaderService` and `JsonReaderService` are interchangeable implementations. Swapping one for the other requires changing a single line in `Program.cs` - the controller, job processor, and all callers remain untouched. This is the Strategy Pattern: same interface, swappable behavior, caller never knows the difference. A proof test in `CsvReaderServiceTests` verifies both implementations return identical results from the same data in different formats.
 
+**Strategy Pattern extended to job storage (IJobStore)** - `JobStore` (in-memory, `ConcurrentDictionary`-backed, safe as a Singleton) and `EfJobStore` (EF Core/Postgres, registered Scoped) both implement `IJobStore`. `JobsController` depends only on the interface; `Program.cs` registers `EfJobStore` in production, and swapping back to the in-memory implementation is the same one-line change already established for `ICsvReaderService`. `EfJobStoreTests` includes a parity test against `JobStore`, same shape as the CSV/JSON proof test.
+
+**DbContext registered Scoped, not Singleton or Transient** - `JobSearchDbContext` is not thread-safe, so a Singleton instance shared across every concurrent request would corrupt tracked state or throw. Transient would hand out a fresh instance per injection site even within the same request, defeating change-tracking and opening redundant connections for what should be one unit of work. Scoped - one instance per request - is the only lifetime that matches how a request-scoped unit of work actually behaves.
+
+**IServiceScopeFactory for fire-and-forget background work** - `JobsController.StartJob` kicks off `ProcessApplicationsAsync` via `Task.Run` without awaiting it, so that work can outlive the HTTP request that started it. Reusing the controller's own request-scoped `IJobStore`/`ICsvReaderService` inside that background method would risk touching a `DbContext` already disposed once the request's scope ends. The background method instead creates its own scope via `IServiceScopeFactory` and resolves fresh instances from it - a lifetime tied to the background work itself, not to the request that kicked it off.
+
 **Interface-based DI** - All services are registered against interfaces. This decouples controllers from implementations and makes unit testing with Moq clean and straightforward.
 
-**ConcurrentDictionary for JobStore and IdempotencyService** - Both run in singleton scope and handle concurrent requests. `ConcurrentDictionary` ensures thread-safe reads and writes without manual locking. `IdempotencyService` uses a composite key of `clientId:idempotencyKey` so two clients sending the same GUID do not collide.
+**ConcurrentDictionary for IdempotencyService** - Runs in singleton scope and handles concurrent requests. `ConcurrentDictionary` ensures thread-safe reads and writes without manual locking. Uses a composite key of `clientId:idempotencyKey` so two clients sending the same GUID do not collide.
 
 **Idempotency-Key scoped to client identity** - The idempotency store keys each entry to the authenticated client identity plus the caller-supplied key. A user JWT resolves to the `name` claim. A client credentials JWT resolves to the `client_id` claim. This prevents one client's key from shadowing another client's identical key.
 
