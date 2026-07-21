@@ -30,11 +30,11 @@ Senior Software Engineer, U.S. Department of State Global Financial Services via
 
 DEFENSE AND EARLIER CAREER
 
-Senior Software Engineer / Acting Supervisor, BAE Systems (1999-2014), Charleston SC. 15-year career progressing from developer to acting supervisor of a 5-person systems development team. Subject matter expert for software and database development on the Army's Automated Installation Entry (AIE) access control contract. Built custom C4I applications, web portals, reporting systems, and data integration tools in C# and .NET. Won the BAE Systems Chairman's Award for Innovation 6 times.
+Senior Software Engineer / Acting Supervisor, BAE Systems (May 1999-Nov 2014), Charleston SC. 15-year career progressing from developer to acting supervisor of a 5-person systems development team. Subject matter expert for software and database development on the Army's Automated Installation Entry (AIE) access control contract. Built custom C4I applications, web portals, reporting systems, and data integration tools in C# and .NET. Won the BAE Systems Chairman's Award for Innovation 6 times.
 
-Field Support Lead / Software Engineer, Iberon LLC, Army AIE II+ Contract (2015-2018). C# and Ruby on Rails developer on Army automated gate and access control systems. Provided Tier III field support, evaluated third-party SDKs, and built prototype applications to validate integration options at Army installations nationwide.
+Field Support Lead / Software Engineer, Iberon LLC, Army AIE II+ Contract (June 2015-Nov 2018). C# and Ruby on Rails developer on Army automated gate and access control systems. Provided Tier III field support, evaluated third-party SDKs, and built prototype applications to validate integration options at Army installations nationwide.
 
-Lead Software Engineer, Technology Industries Inc. (2014-2015). Solutions manager and lead engineer for FAA and Pentagon identity and access management projects. Built RESTful .NET web services, authored API documentation, and stood up Azure cloud environments for teaming partners.
+Lead Software Engineer, Technology Industries Inc. (Nov 2014-June 2015). Solutions manager and lead engineer for FAA and Pentagon identity and access management projects. Built RESTful .NET web services, authored API documentation, and stood up Azure cloud environments for teaming partners.
 
 ---
 
