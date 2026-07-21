@@ -1,9 +1,11 @@
 using Asp.Versioning;
+using LampLightLabs.JobSearch.Api.Data;
 using LampLightLabs.JobSearch.Api.Filters;
 using LampLightLabs.JobSearch.Api.Middleware;
 using LampLightLabs.JobSearch.Api.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.RateLimiting;
@@ -90,7 +92,19 @@ builder.Services.AddScoped<ICsvReaderService, CsvReaderService>();
 // For testing purposes, you can swap out the real CSV reader with a JSON reader that reads from a test file.
 //builder.Services.AddScoped<ICsvReaderService, JsonReaderService>();
 
-builder.Services.AddSingleton<JobStore>();
+// EF Core / Postgres — registered Scoped by AddDbContext (the default and only safe
+// lifetime for a DbContext: not thread-safe, so never Singleton; wasteful to make
+// Transient since one unit of work should share one instance/connection).
+var pgConnectionString = builder.Configuration.GetConnectionString("Postgres")
+    ?? throw new InvalidOperationException("Postgres connection string is not configured.");
+builder.Services.AddDbContext<JobSearchDbContext>(options =>
+    options.UseNpgsql(pgConnectionString));
+
+// IJobStore -> EfJobStore is the production registration (Postgres-backed). The
+// original in-memory JobStore class is kept for its own unit tests and as a live
+// second implementation of the same interface (Strategy Pattern, same shape as
+// ICsvReaderService/JsonReaderService below) — swapping back to it is this one line.
+builder.Services.AddScoped<IJobStore, EfJobStore>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
 builder.Services.AddSingleton<IIdempotencyService, IdempotencyService>();
