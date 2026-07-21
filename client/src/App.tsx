@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import ThemeSwitcher, { type Theme } from './ThemeSwitcher'
+import Message from './Message'
 
 const API_URL = 'https://lamplightlabs-api.azurewebsites.net/api/rag/match'
 
@@ -29,7 +30,8 @@ export default function App() {
   const [result, setResult] = useState<RagMatchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
+  const applicant: string = 'Michael' 
+  
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
@@ -40,7 +42,7 @@ export default function App() {
     setError(null)
     setResult(null)
 
-    try {
+     try {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,9 +67,10 @@ export default function App() {
       <header>
         <h1>Resume Match Analyzer</h1>
         <p className="subtitle">
-          Paste a job description to see how well your resume matches.
+          Paste a job description to see how well {applicant}'s resume matches.
         </p>
         <ThemeSwitcher theme={theme} onThemeChange={setTheme} />
+        <Message name={applicant} message='Welcome to the Resume Match Analyzer!' />
       </header>
 
       <form onSubmit={handleSubmit}>
