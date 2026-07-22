@@ -1,4 +1,5 @@
 ﻿using LampLightLabs.JobSearch.Api.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 
 namespace LampLightLabs.JobSearch.Api.Services
@@ -17,6 +18,19 @@ namespace LampLightLabs.JobSearch.Api.Services
     public class JobStore : IJobStore
     {
         private readonly ConcurrentDictionary<string, JobRecord> _jobs = new();
+        private readonly ILogger<JobStore> _logger;
+
+        /// <summary>
+        /// Logger defaults to <see cref="NullLogger{T}"/> when not supplied so the
+        /// existing <c>new JobStore()</c> call sites in <c>JobStoreTests.cs</c> and
+        /// <c>EfJobStoreTests.cs</c> keep compiling unchanged. Production DI always
+        /// resolves a real <see cref="ILogger{JobStore}"/> here since the parameter type
+        /// is registered in the container regardless of the default value.
+        /// </summary>
+        public JobStore(ILogger<JobStore>? logger = null)
+        {
+            _logger = logger ?? NullLogger<JobStore>.Instance;
+        }
 
         /// <summary>
         /// Creates a new job record with default Queued status and adds it to the store.
@@ -26,6 +40,7 @@ namespace LampLightLabs.JobSearch.Api.Services
         {
             var job = new JobRecord();
             _jobs[job.JobId] = job;
+            _logger.LogInformation("Job {JobId} created in in-memory store", job.JobId);
             return job;
         }
 
@@ -34,8 +49,14 @@ namespace LampLightLabs.JobSearch.Api.Services
         /// </summary>
         /// <param name="jobId">The ID of the job to retrieve.</param>
         /// <returns>The <see cref="JobRecord"/> if found; otherwise, null.</returns>
-        public JobRecord? GetJob(string jobId) =>
-            _jobs.TryGetValue(jobId, out var job) ? job : null;
+        public JobRecord? GetJob(string jobId)
+        {
+            if (_jobs.TryGetValue(jobId, out var job))
+                return job;
+
+            _logger.LogWarning("GetJob: job {JobId} not found in in-memory store", jobId);
+            return null;
+        }
 
         /// <summary>
         /// Updates a job record by its ID. Does nothing if the job does not exist.
@@ -45,7 +66,14 @@ namespace LampLightLabs.JobSearch.Api.Services
         public void UpdateJob(string jobId, Action<JobRecord> update)
         {
             if (_jobs.TryGetValue(jobId, out var job))
+            {
                 update(job);
+                _logger.LogDebug("Job {JobId} updated in in-memory store, status now {Status}", jobId, job.Status);
+            }
+            else
+            {
+                _logger.LogWarning("UpdateJob: job {JobId} not found in in-memory store, update skipped", jobId);
+            }
         }
 
         // IJobStore explicit implementation — thin async wrappers around the sync
