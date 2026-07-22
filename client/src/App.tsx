@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import ThemeSwitcher, { type Theme } from './ThemeSwitcher'
 import Message from './Message'
+import { UserContext } from './UserContext'
 
 const API_URL = 'https://lamplightlabs-api.azurewebsites.net/api/rag/match'
 
@@ -70,7 +71,9 @@ export default function App() {
           Paste a job description to see how well {applicant}'s resume matches.
         </p>
         <ThemeSwitcher theme={theme} onThemeChange={setTheme} />
-        <Message name={applicant} message='Welcome to the Resume Match Analyzer!' />
+        <UserContext.Provider value={{ name: applicant, message: 'Welcome to the Resume Match Analyzer!' }}>
+          <Message />
+        </UserContext.Provider>
       </header>
 
       <form onSubmit={handleSubmit}>

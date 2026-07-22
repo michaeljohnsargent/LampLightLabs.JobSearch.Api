@@ -1,12 +1,17 @@
 import React from 'react'
+import { UserContext } from './UserContext'
 
-type MessageProps = {
-    name: string,
-    message: string
-}
 
-const Message: React.FC<MessageProps> = ({ name, message }  ) => {
-    return(
+const Message: React.FC = () => {
+    const userContext = React.useContext(UserContext)
+
+    if (!userContext) {
+        throw new Error('Message must be used within a UserContext.Provider')
+    }
+
+    const { name, message } = userContext
+
+    return (
         <p>{name}, {message}</p>
     ) 
 }
