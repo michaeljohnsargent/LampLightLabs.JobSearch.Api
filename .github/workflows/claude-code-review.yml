@@ -1,0 +1,48 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request against the architecture and conventions
+            documented in CLAUDE.md (versioning structure, auth schemes, the
+            Strategy Pattern used for ICsvReaderService/IJobStore, the
+            characterization-testing rule for StatusCategorizerService, and
+            the async job/DI-scope pattern in JobsController).
+
+            Flag:
+            - Bugs, security issues, or unhandled edge cases
+            - Deviations from established patterns without a stated reason
+            - Missing or weakened tests for changed behavior
+            - Any accidental change to frozen characterization test behavior
+
+            Leave the review as a PR comment. Do not push commits.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob"
+
+# Setup required (one-time, done by Michael in GitHub, not by Claude):
+# 1. Repo Settings -> Secrets and variables -> Actions -> New repository secret
+#    Name: ANTHROPIC_API_KEY   Value: <your Anthropic API key>
+# 2. Verify the action name/inputs against the current anthropics/claude-code-action
+#    marketplace listing before first run -- GitHub Action interfaces do change
+#    versions, and this was written from the pattern as of this session.
