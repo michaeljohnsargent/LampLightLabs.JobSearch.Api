@@ -13,6 +13,7 @@ A personal ASP.NET Core Web API project built by **Michael Sargent** to dust off
 - [API Versioning](#api-versioning)
 - [Async Job Pattern](#async-job-pattern---how-it-works)
 - [RAG Pipeline](#rag-pipeline---how-it-works)
+- [Frontend](#frontend)
 - [Project Structure](#project-structure)
 - [Tech Stack](#tech-stack)
 - [Running Locally](#running-locally)
@@ -275,6 +276,33 @@ Request: POST /api/rag/match { "jobDescription": "..." }
           matchScore, summary, strengths, gaps  ← from Claude
           retrievedContext                       ← from vector store (step 1)
 ```
+
+---
+
+## Frontend
+
+The `client/` directory contains **Resume Match Analyzer**, a React + TypeScript + Vite single-page app that calls the real `POST /api/rag/match` endpoint documented above — it does not compute or fake anything client-side (demo mode, below, is the one deliberate exception).
+
+### Deployment
+
+The frontend deploys to **Azure Static Web Apps**, with a GitHub Actions workflow (`.github/workflows/azure-static-web-apps-blue-coast-05842a60f.yml`) that builds and deploys on every push to `main`. This is the same push-to-`main` CI/CD pattern the backend uses for its own deployment to Azure Web App (`.github/workflows/main_lamplightlabs-api.yml`) — both halves of this project ship the same way.
+
+### Theme System
+
+Five themes — **Professional**, **Bold**, **Minimal**, **Claude Dark**, and **Claude Light** — switchable via `ThemeSwitcher.tsx`. Selecting a theme sets a `data-theme` attribute on the document root, which drives a set of CSS custom properties (`--bg`, `--surface`, `--surface-raised`, `--border`, `--text`, `--muted`, `--accent`, `--accent-hover`, `--font`, `--radius`, plus semantic score/status colors) defined per-theme in `App.css`.
+
+The Claude Dark/Claude Light pair was added 7/30/2026 as a deliberate homage to Claude's actual design language — the clay/terracotta accent (`#d97757`) is intentional, not a random color choice.
+
+### Demo Mode
+
+Three buttons — "See a strong match," "See a partial match," "See a weak match" — populate the same results UI with realistic hardcoded fixture data instead of calling the API. This is a deliberate cost-conscious design decision, not a limitation: it lets visitors see the app's full functionality, including all three score bands, without spending real API credits on every page view.
+
+### Live URLs
+
+| | URL |
+|---|---|
+| Frontend | [match.lamplightlabs.com](https://match.lamplightlabs.com) |
+| API | [lamplightlabs-api.azurewebsites.net](https://lamplightlabs-api.azurewebsites.net) (Swagger at `/swagger`) |
 
 ---
 
