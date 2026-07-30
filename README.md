@@ -104,6 +104,8 @@ A `ViteDev` CORS policy allows `http://localhost:5173` (the Vite dev server defa
 
 > Requires `OpenAI:ApiKey` (embeddings via `text-embedding-3-small`) and `Anthropic:ApiKey` (generation via Claude) set in user secrets. See **Running Locally** for setup.
 
+> **Upstream failures never reach the client raw.** If the Anthropic or OpenAI call underneath any of the three AI endpoints above fails (quota/billing exhaustion, rate limit, 5xx), the full exception is logged server-side and the client gets back a generic message — `429` for a genuine rate limit, `503` otherwise — never the SDK's raw exception text (which can carry account IDs, usage figures, or billing-page links) or a stack trace. `/api/rag/match`'s `503` also sets `"tryDemo": true` so the frontend can point a visitor at the demo instead of a dead end. See **Key Design Decisions**.
+
 **Response:**
 ```json
 {
@@ -296,6 +298,8 @@ The Claude Dark/Claude Light pair was added 7/30/2026 as a deliberate homage to 
 ### Demo Mode
 
 Three buttons — "See a strong match," "See a partial match," "See a weak match" — populate the same results UI with realistic hardcoded fixture data instead of calling the API. This is a deliberate cost-conscious design decision, not a limitation: it lets visitors see the app's full functionality, including all three score bands, without spending real API credits on every page view.
+
+Demo mode also doubles as the fallback when the real `/api/rag/match` call fails: if the backend reports the failure was on the AI-provider side (`tryDemo: true` in the error response — see **Endpoints** → RAG), the app scrolls to and briefly highlights this section so a visitor who hits a real outage still has a working alternative.
 
 ### Live URLs
 
@@ -520,6 +524,8 @@ The embedding model (`text-embedding-3-small`) and chat model (`gpt-4o-mini`) ar
 **Vitest/RTL over a second, heavier test runner** - The `client/` React app had zero frontend test coverage before this. Vitest was chosen because it shares Vite's config and transform pipeline (no separate Babel/webpack setup to maintain) and is a drop-in Jest-API replacement, so React Testing Library patterns transfer directly. `vite.config.ts` adds a `test` block (`jsdom` environment, `globals: true`, `src/setupTests.ts` importing `@testing-library/jest-dom` matchers); `tsconfig.app.json` adds `vitest/globals` and `@testing-library/jest-dom` to `types` so `describe`/`it`/`expect`/`vi` and the custom matchers type-check without per-file imports. `npm test` runs the suite once (`vitest run`) for CI/hook use; `npm run test:watch` is the interactive loop. `Message.test.tsx` covers the first component: rendering via `UserContext.Provider` and the thrown error when rendered outside one.
 
 **claude-code-review GitHub Action reviews every PR against this repo's own conventions** - `.github/workflows/claude-code-review.yml` runs `anthropics/claude-code-action` on every PR open/sync and posts a review comment. The prompt explicitly points it at this repo's `CLAUDE.md` — versioning structure, the auth schemes, the Strategy Pattern used for `ICsvReaderService`/`IJobStore`, the characterization-testing rule for `StatusCategorizerService`, and the async job/DI-scope pattern in `JobsController` — so review feedback is scoped to deviations from patterns already established here, not generic style nits. It's read-only (`Read,Grep,Glob` via `--allowedTools`) and comment-only: it cannot push commits. Requires an `ANTHROPIC_API_KEY` repository secret, added once in GitHub settings.
+
+**AI provider failures are translated, not propagated** - All three AI endpoints (`/api/rag/match`, `/api/v2/ai/chat`, `/api/v2/sk/chat`) call `ClaudeChatService` and/or `ResumeVectorStoreService`/`SemanticKernelChatService`, which wrap the Anthropic and OpenAI .NET SDKs respectively. Both SDKs throw exceptions whose messages can contain account IDs, exact usage/quota figures, or billing-page URLs on quota/billing failures - real information disclosure if returned to an anonymous client, on top of the usual stack-trace reconnaissance risk. `AiProviderException` (`Provider` + `Reason`: Billing/Unauthorized/RateLimited/Unavailable/Unknown) is the one shape every controller catches; `OpenAiExceptionTranslator` is the shared translation for the two OpenAI-backed call sites (embeddings and Semantic Kernel chat) so that logic isn't duplicated. Controllers log the full original exception via `ILogger<T>` (job description hashed with SHA-256 rather than logged raw) and return only a generic message - `429` for `RateLimited`, `503` for everything else - plus a catch-all `catch (Exception ex)` so even an unrelated failure (e.g. malformed LLM JSON) can't leak raw detail either.
 
 **Two Claude Code hooks scope what the agent can touch and when a turn is "done"** - `.claude/settings.json` wires up:
 - A `PreToolUse` hook (`block-secrets.js`) on `Read`/`Edit`/`Write` that blocks any `appsettings.*.json` override (e.g. `appsettings.Development.json`) or `.env`/`.env.*` file by filename, regardless of directory. The base `appsettings.json` is exempted — it only ever holds placeholder values (see **AI Integration**, **Semantic Kernel Integration**) — so the agent can still read the shape of the config without a path to real secrets, which live only in user secrets or an environment-specific override file.
