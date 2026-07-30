@@ -192,6 +192,49 @@ h1 {
   color: var(--bg);
 }
 
+/* ── Demo mode ─────────────────────────────────────────────────────── */
+
+.demo-section {
+  margin-bottom: 1.25rem;
+}
+
+.demo-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.demo-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.btn-ghost {
+  appearance: none;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.8rem;
+  font-family: var(--font);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.btn-ghost:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ── Form ──────────────────────────────────────────────────────────── */
 
 form {

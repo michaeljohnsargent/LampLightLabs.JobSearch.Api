@@ -18,6 +18,54 @@ interface RagMatchResponse {
   retrievedContext: string[]
 }
 
+const DEMO_STRONG_MATCH: RagMatchResponse = {
+  matchScore: 92,
+  summary:
+    "Michael's resume shows strong, direct alignment with this role: production ASP.NET Core API experience, hands-on Azure deployment, and a shipped RAG/LLM integration nearly identical in shape to what this posting asks for. The main soft spot is container-orchestration depth.",
+  strengths: [
+    '5+ years building production C#/.NET Core APIs, including versioned REST endpoints and multiple auth schemes (JWT, OAuth2, API key)',
+    'Hands-on Azure deployment experience: App Service, Static Web Apps, and CI/CD via GitHub Actions',
+    'Shipped a live RAG/LLM integration end-to-end, from prompt design to a production endpoint',
+    'EF Core and PostgreSQL experience in a real, deployed system, not just tutorials',
+  ],
+  gaps: [
+    'Limited hands-on Kubernetes experience — deployments shown here are Azure App Service/PaaS, not container orchestration',
+  ],
+  retrievedContext: [],
+}
+
+const DEMO_PARTIAL_MATCH: RagMatchResponse = {
+  matchScore: 58,
+  summary:
+    "This role's backend responsibilities — C#/.NET APIs, PostgreSQL, REST design — map cleanly onto Michael's experience. However, the posting expects the same engineer to own Angular development in production, and Michael's frontend work is a personal React project rather than professional Angular ownership.",
+  strengths: [
+    "Solid C#/.NET Core backend experience matching the role's core API and data-layer responsibilities",
+    'Experience with EF Core/PostgreSQL and versioned REST API design',
+    'Comfortable with Azure-hosted deployments, which aligns if this employer is also Azure-based',
+  ],
+  gaps: [
+    "Role expects professional-level Angular ownership; Michael's frontend experience is a personal React project, not production Angular work",
+    'No listed experience at the "full-stack owner" depth this posting implies for frontend responsibilities',
+  ],
+  retrievedContext: [],
+}
+
+const DEMO_WEAK_MATCH: RagMatchResponse = {
+  matchScore: 24,
+  summary:
+    "This posting's core stack — Python, Django, and large-scale data-pipeline engineering — doesn't overlap with Michael's demonstrated experience, which is concentrated in C#/.NET. The only real connection is general familiarity with relational databases and cloud deployment concepts, not the Python ecosystem itself.",
+  strengths: [
+    'General relational database design experience (PostgreSQL) that would transfer conceptually to any backend stack',
+    'Comfortable working with cloud-hosted APIs and CI/CD pipelines, regardless of language',
+  ],
+  gaps: [
+    'No demonstrated Python or Django experience — the entire shown history is C#/.NET',
+    'No experience with the large-scale data-pipeline tooling (e.g. Airflow, Spark) this role calls for',
+    "This is a genuine stack mismatch, not a surface-level gap — the role's day-to-day work wouldn't draw on his primary skill set",
+  ],
+  retrievedContext: [],
+}
+
 function countWords(text: string): number {
   const trimmed = text.trim()
   return trimmed === '' ? 0 : trimmed.split(/\s+/).length
@@ -37,6 +85,12 @@ export default function App() {
 
   const wordCount = countWords(jobDescription)
   const isReady = wordCount >= MIN_WORDS
+
+  function handleDemo(fixture: RagMatchResponse) {
+    setError(null)
+    setLoading(false)
+    setResult(fixture)
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -82,6 +136,21 @@ export default function App() {
             <Message />
           </UserContext.Provider>
         </header>
+
+        <div className="demo-section">
+          <span className="demo-label">Try a sample result</span>
+          <div className="demo-buttons">
+            <button type="button" className="btn-ghost" onClick={() => handleDemo(DEMO_STRONG_MATCH)}>
+              See a strong match
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => handleDemo(DEMO_PARTIAL_MATCH)}>
+              See a partial match
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => handleDemo(DEMO_WEAK_MATCH)}>
+              See a weak match
+            </button>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit}>
           <label htmlFor="jd">Job description</label>
