@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
 import ThemeSwitcher, { type Theme } from './ThemeSwitcher'
 import ScoreGauge from './ScoreGauge'
@@ -77,6 +77,8 @@ export default function App() {
   const [result, setResult] = useState<RagMatchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [demoHighlighted, setDemoHighlighted] = useState(false)
+  const demoSectionRef = useRef<HTMLDivElement>(null)
   const applicant: string = 'Michael'
 
   useEffect(() => {
@@ -89,6 +91,7 @@ export default function App() {
   function handleDemo(fixture: RagMatchResponse) {
     setError(null)
     setLoading(false)
+    setDemoHighlighted(false)
     setResult(fixture)
   }
 
@@ -97,6 +100,7 @@ export default function App() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setDemoHighlighted(false)
 
      try {
       const res = await fetch(API_URL, {
@@ -106,8 +110,14 @@ export default function App() {
       })
 
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(`${res.status} ${res.statusText}${text ? ` — ${text}` : ''}`)
+        const body: { error?: string; tryDemo?: boolean } | null = await res.json().catch(() => null)
+
+        if (body?.tryDemo) {
+          setDemoHighlighted(true)
+          demoSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+
+        throw new Error(body?.error ?? `${res.status} ${res.statusText}`)
       }
 
       setResult(await res.json())
@@ -137,7 +147,10 @@ export default function App() {
           </UserContext.Provider>
         </header>
 
-        <div className="demo-section">
+        <div
+          ref={demoSectionRef}
+          className={`demo-section${demoHighlighted ? ' demo-section--highlight' : ''}`}
+        >
           <span className="demo-label">Try a sample result</span>
           <div className="demo-buttons">
             <button type="button" className="btn-ghost" onClick={() => handleDemo(DEMO_STRONG_MATCH)}>
