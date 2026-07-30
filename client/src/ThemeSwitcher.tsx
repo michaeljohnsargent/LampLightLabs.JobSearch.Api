@@ -1,7 +1,8 @@
-export type Theme = 'claude' | 'professional' | 'bold' | 'minimal'
+export type Theme = 'claude-dark' | 'claude-light' | 'professional' | 'bold' | 'minimal'
 
 const THEMES: { id: Theme; label: string }[] = [
-  { id: 'claude',       label: 'Claude' },
+  { id: 'claude-dark',  label: 'Claude Dark' },
+  { id: 'claude-light', label: 'Claude Light' },
   { id: 'professional', label: 'Professional' },
   { id: 'bold',         label: 'Bold' },
   { id: 'minimal',      label: 'Minimal' },

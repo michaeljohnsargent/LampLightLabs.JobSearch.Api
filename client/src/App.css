@@ -1,14 +1,19 @@
-/* ── Semantic colors (theme-agnostic) ────────────────────────────────── */
+/* ── Semantic colors ──────────────────────────────────────────────────
+   Default tuning is for dark backgrounds; individual themes (e.g.
+   claude-light) override these to stay legible on light surfaces. ── */
 
 :root {
-  --success:     #34d399;
-  --warning:     #fbbf24;
-  --destructive: #f87171;
+  --success:         #34d399;
+  --success-bg:      rgba(52, 211, 153, 0.15);
+  --warning:         #fbbf24;
+  --warning-bg:      rgba(251, 191, 36, 0.15);
+  --destructive:     #f87171;
+  --destructive-bg:  rgba(248, 113, 113, 0.15);
 }
 
 /* ── Theme tokens ─────────────────────────────────────────────────── */
 
-[data-theme="claude"] {
+[data-theme="claude-dark"] {
   --bg:            #1d1917;
   --surface:       #2a2521;
   --surface-raised:#332d28;
@@ -19,6 +24,28 @@
   --accent-hover:  #c26647;
   --font:          'Plus Jakarta Sans', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   --radius:        10px;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+[data-theme="claude-light"] {
+  --bg:            #faf9f5;
+  --surface:       #ffffff;
+  --surface-raised:#f4f1ea;
+  --border:        #e5e1d6;
+  --text:          #2b2621;
+  --muted:         #7c7568;
+  --accent:        #bd5d3a;
+  --accent-hover:  #a54f2f;
+  --font:          'Plus Jakarta Sans', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --radius:        10px;
+  --success:        #15803d;
+  --success-bg:     rgba(21, 128, 61, 0.12);
+  --warning:        #92400e;
+  --warning-bg:     rgba(146, 64, 14, 0.12);
+  --destructive:    #b91c1c;
+  --destructive-bg: rgba(185, 28, 28, 0.12);
   background-color: var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -262,7 +289,7 @@ label {
   padding: 0.75rem 1rem;
   border: 1px solid var(--destructive);
   border-radius: var(--radius);
-  background: color-mix(in oklab, var(--destructive) 12%, transparent);
+  background: var(--destructive-bg);
   color: var(--destructive);
   font-size: 0.9rem;
 }
@@ -426,13 +453,13 @@ label {
 
 .skill-chip--match {
   border-color: color-mix(in oklab, var(--success) 45%, var(--border));
-  background: color-mix(in oklab, var(--success) 12%, transparent);
+  background: var(--success-bg);
   color: var(--success);
 }
 
 .skill-chip--gap {
   border-color: color-mix(in oklab, var(--destructive) 45%, var(--border));
-  background: color-mix(in oklab, var(--destructive) 12%, transparent);
+  background: var(--destructive-bg);
   color: var(--destructive);
 }
 

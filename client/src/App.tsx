@@ -24,7 +24,7 @@ function countWords(text: string): number {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState<Theme>('claude')
+  const [theme, setTheme] = useState<Theme>('claude-dark')
   const [jobDescription, setJobDescription] = useState('')
   const [result, setResult] = useState<RagMatchResponse | null>(null)
   const [loading, setLoading] = useState(false)
