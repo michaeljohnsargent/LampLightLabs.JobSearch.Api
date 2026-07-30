@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import ThemeSwitcher, { type Theme } from './ThemeSwitcher'
+import ScoreGauge from './ScoreGauge'
+import SkillChip from './SkillChip'
 import Message from './Message'
 import { UserContext } from './UserContext'
+import { Sparkles, ArrowRight } from 'lucide-react'
 
 const API_URL = 'https://lamplightlabs-api.azurewebsites.net/api/rag/match'
+const MIN_WORDS = 10
 
 interface RagMatchResponse {
   matchScore: number
@@ -14,30 +18,27 @@ interface RagMatchResponse {
   retrievedContext: string[]
 }
 
-function ScoreBadge({ score }: { score: number }) {
-  const colour =
-    score >= 75 ? 'score-high' : score >= 50 ? 'score-mid' : 'score-low'
-  return (
-    <div className={`score-badge ${colour}`}>
-      <span className="score-number">{score}</span>
-      <span className="score-denom">/&nbsp;100</span>
-    </div>
-  )
+function countWords(text: string): number {
+  const trimmed = text.trim()
+  return trimmed === '' ? 0 : trimmed.split(/\s+/).length
 }
 
 export default function App() {
-  const [theme, setTheme] = useState<Theme>('bold')
+  const [theme, setTheme] = useState<Theme>('claude')
   const [jobDescription, setJobDescription] = useState('')
   const [result, setResult] = useState<RagMatchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const applicant: string = 'Michael' 
-  
+  const applicant: string = 'Michael'
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
 
-  async function handleSubmit(e: React.FormEvent) {
+  const wordCount = countWords(jobDescription)
+  const isReady = wordCount >= MIN_WORDS
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
@@ -64,66 +65,99 @@ export default function App() {
   }
 
   return (
-    <main>
-      <header>
-        <h1>Resume Match Analyzer</h1>
-        <p className="subtitle">
-          Paste a job description to see how well {applicant}'s resume matches.
-        </p>
-        <ThemeSwitcher theme={theme} onThemeChange={setTheme} />
-        <UserContext.Provider value={{ name: applicant, message: 'Welcome to the Resume Match Analyzer!' }}>
-          <Message />
-        </UserContext.Provider>
-      </header>
-
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="jd">Job description</label>
-        <textarea
-          id="jd"
-          value={jobDescription}
-          onChange={e => setJobDescription(e.target.value)}
-          placeholder="Paste the full job description here…"
-          rows={12}
-          required
-          disabled={loading}
-        />
-        <button type="submit" disabled={loading || !jobDescription.trim()}>
-          {loading ? 'Analyzing…' : 'Analyze match'}
-        </button>
-      </form>
-
-      {error && (
-        <div className="error-box" role="alert">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {result && (
-        <section className="results">
-          <ScoreBadge score={result.matchScore} />
-
-          <div className="result-section">
-            <h2>Summary</h2>
-            <p>{result.summary}</p>
+    <>
+      <div className="top-glow" aria-hidden="true" />
+      <main>
+        <header>
+          <div className="badge">
+            <Sparkles size={14} aria-hidden="true" />
+            <span>Resume Match Analyzer</span>
           </div>
+          <h1>How well does your resume fit?</h1>
+          <p className="subtitle">
+            Paste a job description to see how well {applicant}'s resume matches.
+          </p>
+          <ThemeSwitcher theme={theme} onThemeChange={setTheme} />
+          <UserContext.Provider value={{ name: applicant, message: 'Welcome to the Resume Match Analyzer!' }}>
+            <Message />
+          </UserContext.Provider>
+        </header>
 
-          <div className="result-columns">
-            <div className="result-section">
-              <h2>Strengths</h2>
-              <ul>
-                {result.strengths.map((s, i) => <li key={i}>{s}</li>)}
-              </ul>
+        <form onSubmit={handleSubmit}>
+          <label htmlFor="jd">Job description</label>
+          <textarea
+            id="jd"
+            className="jd-textarea"
+            value={jobDescription}
+            onChange={e => setJobDescription(e.target.value)}
+            placeholder="Paste the full job description here…"
+            required
+            disabled={loading}
+          />
+          <div className="jd-meta">
+            <span className="word-count">{wordCount} word{wordCount === 1 ? '' : 's'}</span>
+            <span className={`readiness${isReady ? ' readiness--ready' : ''}`}>
+              {isReady ? 'Ready to analyze' : 'At least 10 words needed'}
+            </span>
+          </div>
+          <button type="submit" className="btn-primary" disabled={loading || !isReady}>
+            {loading ? (
+              'Analyzing…'
+            ) : (
+              <>
+                Analyze match
+                <ArrowRight size={16} className="btn-icon" aria-hidden="true" />
+              </>
+            )}
+          </button>
+        </form>
+
+        {error && (
+          <div className="error-box" role="alert">
+            <strong>Error:</strong> {error}
+          </div>
+        )}
+
+        {loading && (
+          <div className="skeleton" aria-hidden="true">
+            <div className="skeleton-circle" />
+            <div className="skeleton-bar" />
+            <div className="skeleton-cards">
+              <div className="skeleton-card" />
+              <div className="skeleton-card" />
+            </div>
+          </div>
+        )}
+
+        {result && !loading && (
+          <section className="results">
+            <div className="gauge-card">
+              <ScoreGauge score={result.matchScore} />
+              <p className="gauge-summary">{result.summary}</p>
             </div>
 
-            <div className="result-section">
-              <h2>Gaps</h2>
-              <ul>
-                {result.gaps.map((g, i) => <li key={i}>{g}</li>)}
-              </ul>
+            <div className="result-columns">
+              <div className="chip-card">
+                <h2>Matched</h2>
+                <ul className="chip-list">
+                  {result.strengths.map((s, i) => (
+                    <SkillChip key={i} text={s} variant="match" />
+                  ))}
+                </ul>
+              </div>
+
+              <div className="chip-card">
+                <h2>Missing</h2>
+                <ul className="chip-list">
+                  {result.gaps.map((g, i) => (
+                    <SkillChip key={i} text={g} variant="gap" />
+                  ))}
+                </ul>
+              </div>
             </div>
-          </div>
-        </section>
-      )}
-    </main>
+          </section>
+        )}
+      </main>
+    </>
   )
 }
