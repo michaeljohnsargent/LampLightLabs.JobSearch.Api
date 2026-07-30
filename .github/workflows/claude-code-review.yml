@@ -23,6 +23,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
           prompt: |
             Review this pull request against the architecture and conventions
             documented in CLAUDE.md (versioning structure, auth schemes, the
@@ -39,11 +40,12 @@ jobs:
             - Missing or weakened tests for changed behavior
             - Any accidental change to frozen characterization test behavior
 
-            Leave the review as a PR comment. Do not push commits.
+            Post the review as a PR comment (update_claude_comment) and use
+            inline comments for specific line-level issues. Do not push commits.
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 20
-            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --max-turns 30
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),mcp__github_comment__update_claude_comment,mcp__github_inline_comment__create_inline_comment"
 
 # Setup required (one-time, done by Michael in GitHub, not by Claude):
 # 1. Repo Settings -> Secrets and variables -> Actions -> New repository secret
@@ -52,11 +54,25 @@ jobs:
 #    marketplace listing before first run -- GitHub Action interfaces do change
 #    versions, and this was written from the pattern as of this session.
 #
-# Cost fix (2026-07-30): the first four runs of this workflow defaulted to
-# claude-opus-5[1m] (no model pin) and had no way to see the PR diff cheaply
+# Cost fix, part 1 (2026-07-30): the first four runs of this workflow defaulted
+# to claude-opus-5[1m] (no model pin) and had no way to see the PR diff cheaply
 # (--allowedTools only granted Read/Grep/Glob, no `gh pr diff`/`gh pr view`),
-# so the agent thrashed — 16-22 permission denials and 54-68 turns per run,
-# $2-3 each, one run failing outright. Pinned to Sonnet, capped turns, and
-# granted the two read-only `gh` commands the official claude-code-action
-# PR-review example (examples/pr-review-comprehensive.yml) uses for exactly
-# this reason.
+# so the agent thrashed -- 16-22 permission denials and 54-68 turns per run,
+# $2-3 each, one run failing outright. Pinned to Sonnet and granted the two
+# read-only `gh` commands the official claude-code-action PR-review example
+# (examples/pr-review-comprehensive.yml) uses for exactly this reason.
+#
+# Cost fix, part 2 (2026-07-30, same day): part 1 cut cost ~80% but the run
+# still failed (hit --max-turns 20, which the action treats as a hard failure,
+# not a graceful stop). Root-caused from the action's own source
+# (src/mcp/install-mcp-server.ts): this workflow runs in "agent mode" (an
+# explicit prompt, not a @claude mention), and in agent mode the comment-
+# posting MCP server is only loaded if --allowedTools explicitly requests it --
+# which it never did, in any of the five runs so far. Every run analyzed the
+# PR and then had *no tool available to post the result* -- confirmed by
+# every single run's log showing "No buffered inline comments." Fix:
+# track_progress: true forces "tag mode," which always loads the comment
+# server and creates the tracking comment update_claude_comment needs to
+# exist before it can update it; the inline-comment server needs its own
+# explicit --allowedTools grant regardless of mode, added above. --max-turns
+# raised to 30 since posting the review is itself a few extra tool calls.
