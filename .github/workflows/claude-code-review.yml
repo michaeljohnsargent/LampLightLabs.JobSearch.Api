@@ -30,6 +30,9 @@ jobs:
             characterization-testing rule for StatusCategorizerService, and
             the async job/DI-scope pattern in JobsController).
 
+            Start with `gh pr diff` to see the full changeset in one call —
+            don't reconstruct it by reading files individually.
+
             Flag:
             - Bugs, security issues, or unhandled edge cases
             - Deviations from established patterns without a stated reason
@@ -38,7 +41,9 @@ jobs:
 
             Leave the review as a PR comment. Do not push commits.
           claude_args: |
-            --allowedTools "Read,Grep,Glob"
+            --model claude-sonnet-5
+            --max-turns 20
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
 
 # Setup required (one-time, done by Michael in GitHub, not by Claude):
 # 1. Repo Settings -> Secrets and variables -> Actions -> New repository secret
@@ -46,3 +51,12 @@ jobs:
 # 2. Verify the action name/inputs against the current anthropics/claude-code-action
 #    marketplace listing before first run -- GitHub Action interfaces do change
 #    versions, and this was written from the pattern as of this session.
+#
+# Cost fix (2026-07-30): the first four runs of this workflow defaulted to
+# claude-opus-5[1m] (no model pin) and had no way to see the PR diff cheaply
+# (--allowedTools only granted Read/Grep/Glob, no `gh pr diff`/`gh pr view`),
+# so the agent thrashed — 16-22 permission denials and 54-68 turns per run,
+# $2-3 each, one run failing outright. Pinned to Sonnet, capped turns, and
+# granted the two read-only `gh` commands the official claude-code-action
+# PR-review example (examples/pr-review-comprehensive.yml) uses for exactly
+# this reason.
