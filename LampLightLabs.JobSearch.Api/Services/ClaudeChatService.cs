@@ -52,8 +52,9 @@ public class ClaudeChatService : IClaudeChatService
         return ExtractText(response);
     }
 
-    // Translates Anthropic SDK exceptions into ClaudeApiUnavailableException so callers depend on
-    // an application-level failure reason rather than the Anthropic SDK's exception hierarchy directly.
+    // Translates Anthropic SDK exceptions into AiProviderException so callers depend on an
+    // application-level failure reason rather than the Anthropic SDK's exception hierarchy —
+    // and never see the SDK's raw exception message, which can include account/billing detail.
     private async Task<Message> CreateMessageAsync(MessageCreateParams parameters, CancellationToken cancellationToken)
     {
         try
@@ -62,40 +63,43 @@ public class ClaudeChatService : IClaudeChatService
         }
         catch (AnthropicForbiddenException ex) when (ex.Message.Contains("billing_error", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ClaudeApiUnavailableException(
-                ClaudeApiFailureReason.Billing,
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.Billing,
                 "The Claude API account has insufficient credits or another billing issue.",
-                innerException: ex);
+                ex);
         }
         catch (AnthropicForbiddenException ex)
         {
-            throw new ClaudeApiUnavailableException(
-                ClaudeApiFailureReason.Unauthorized,
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.Unauthorized,
                 "The Claude API rejected the request as forbidden.",
-                innerException: ex);
+                ex);
         }
         catch (AnthropicRateLimitException ex)
         {
-            // The SDK doesn't expose a typed Retry-After value on this exception, so RetryAfter
-            // is left unset here; callers should apply their own backoff.
-            throw new ClaudeApiUnavailableException(
-                ClaudeApiFailureReason.RateLimited,
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.RateLimited,
                 "The Claude API rate limit was exceeded.",
-                innerException: ex);
+                ex);
         }
         catch (Anthropic5xxException ex)
         {
-            throw new ClaudeApiUnavailableException(
-                ClaudeApiFailureReason.Unavailable,
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.Unavailable,
                 "The Claude API is temporarily unavailable.",
-                innerException: ex);
+                ex);
         }
         catch (AnthropicApiException ex)
         {
-            throw new ClaudeApiUnavailableException(
-                ClaudeApiFailureReason.Unknown,
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.Unknown,
                 "The Claude API returned an unexpected error.",
-                innerException: ex);
+                ex);
         }
     }
 

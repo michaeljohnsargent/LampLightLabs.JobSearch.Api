@@ -1,3 +1,4 @@
+using System.ClientModel;
 using Microsoft.SemanticKernel;
 
 namespace LampLightLabs.JobSearch.Api.Services;
@@ -30,8 +31,14 @@ public class SemanticKernelChatService : ISemanticKernelChatService
     /// <inheritdoc />
     public async Task<string> SendPromptAsync(string prompt, CancellationToken cancellationToken)
     {
-        var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
-
-        return result.ToString();
+        try
+        {
+            var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
+            return result.ToString();
+        }
+        catch (ClientResultException ex)
+        {
+            throw OpenAiExceptionTranslator.Translate(ex);
+        }
     }
 }

@@ -1,3 +1,4 @@
+using System.ClientModel;
 using Microsoft.Extensions.AI;
 
 namespace LampLightLabs.JobSearch.Api.Services;
@@ -31,10 +32,18 @@ public class ResumeVectorStoreService : BackgroundService, IResumeVectorStoreSer
 
     public async Task<IReadOnlyList<string>> GetRelevantChunksAsync(string query, int topK, CancellationToken cancellationToken = default)
     {
-        await _initialized.Task.WaitAsync(cancellationToken);
+        ReadOnlyMemory<float> queryEmbedding;
+        try
+        {
+            await _initialized.Task.WaitAsync(cancellationToken);
 
-        var result = await _embeddingGenerator.GenerateAsync([query], cancellationToken: cancellationToken);
-        var queryEmbedding = result[0].Vector;
+            var result = await _embeddingGenerator.GenerateAsync([query], cancellationToken: cancellationToken);
+            queryEmbedding = result[0].Vector;
+        }
+        catch (ClientResultException ex)
+        {
+            throw OpenAiExceptionTranslator.Translate(ex);
+        }
 
         return [.. _store
             .Select(entry => (entry.Chunk, Score: CosineSimilarity(queryEmbedding, entry.Embedding)))
