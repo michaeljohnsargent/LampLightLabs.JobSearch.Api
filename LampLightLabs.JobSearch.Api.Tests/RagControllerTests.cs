@@ -1,6 +1,7 @@
 using LampLightLabs.JobSearch.Api.Controllers;
 using LampLightLabs.JobSearch.Api.Models.Rag;
 using LampLightLabs.JobSearch.Api.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -157,5 +158,41 @@ public class RagControllerTests
             new RagMatchRequest { JobDescription = "Requirements\n\n\n\nResponsibilities" }, ct);
 
         mock.Verify(s => s.MatchAsync("Requirements\n\nResponsibilities", ct), Times.Once);
+    }
+
+    // --- Claude API failure mapping ---
+
+    [Theory]
+    [InlineData(ClaudeApiFailureReason.Billing)]
+    [InlineData(ClaudeApiFailureReason.Unauthorized)]
+    [InlineData(ClaudeApiFailureReason.Unavailable)]
+    [InlineData(ClaudeApiFailureReason.Unknown)]
+    public async Task Match_ClaudeApiUnavailable_Returns503(ClaudeApiFailureReason reason)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ClaudeApiUnavailableException(reason, "Claude API failed."));
+        var controller = new RagController(mock.Object);
+
+        var result = await controller.Match(new RagMatchRequest { JobDescription = "Senior .NET Engineer" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task Match_ClaudeApiRateLimited_Returns429()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ClaudeApiUnavailableException(ClaudeApiFailureReason.RateLimited, "Rate limited."));
+        var controller = new RagController(mock.Object);
+
+        var result = await controller.Match(new RagMatchRequest { JobDescription = "Senior .NET Engineer" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, objectResult.StatusCode);
     }
 }

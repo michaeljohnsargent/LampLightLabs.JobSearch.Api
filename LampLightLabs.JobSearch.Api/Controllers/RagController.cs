@@ -29,8 +29,23 @@ public class RagController : ControllerBase
         if (string.IsNullOrWhiteSpace(sanitized))
             return BadRequest(new { Error = "JobDescription is required." });
 
-        var result = await _ragMatchService.MatchAsync(sanitized, cancellationToken);
-        return Ok(result);
+        try
+        {
+            var result = await _ragMatchService.MatchAsync(sanitized, cancellationToken);
+            return Ok(result);
+        }
+        catch (ClaudeApiUnavailableException ex) when (ex.Reason == ClaudeApiFailureReason.RateLimited)
+        {
+            return StatusCode(StatusCodes.Status429TooManyRequests,
+                new { Error = "The AI service is rate limited. Please try again shortly." });
+        }
+        catch (ClaudeApiUnavailableException)
+        {
+            // Covers Billing, Unauthorized, Unavailable, and Unknown alike — none of these are
+            // the caller's fault, and the billing/auth detail isn't something a client can act on.
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { Error = "The AI service is temporarily unavailable. Please try again later." });
+        }
     }
 
     // Strips non-printable control characters, normalizes line endings, and
