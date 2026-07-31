@@ -24,7 +24,6 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: true
-          show_full_output: true # TEMPORARY — diagnosing the remaining permission denials; revert once found
           prompt: |
             Review this pull request against the architecture and conventions
             documented in CLAUDE.md (versioning structure, auth schemes, the
@@ -34,6 +33,14 @@ jobs:
 
             Start with `gh pr diff` to see the full changeset in one call —
             don't reconstruct it by reading files individually.
+
+            This review is read-only by design: you have Read/Grep/Glob plus
+            `gh pr diff`/`gh pr view` only. Do not attempt to run the test
+            suite, build the project, `git fetch`, or search the filesystem
+            with `find` — none of those are available and each attempt costs
+            a wasted turn. Evaluate test coverage and correctness by reading
+            the test files, not by executing them. When leaving an inline
+            comment, only target lines that appear in the `gh pr diff` output.
 
             Flag:
             - Bugs, security issues, or unhandled edge cases
@@ -77,3 +84,19 @@ jobs:
 # exist before it can update it; the inline-comment server needs its own
 # explicit --allowedTools grant regardless of mode, added above. --max-turns
 # raised to 30 since posting the review is itself a few extra tool calls.
+#
+# Cost fix, part 3 (2026-07-31): part 2 fixed comment delivery (confirmed --
+# the tracking comment updated live with real progress) but still hit
+# --max-turns twice. Diagnosed with a one-off show_full_output: true run
+# (see PR #40, reverted after) rather than guessing further: ~9 of the ~31
+# turns were spent on denied Bash calls the agent kept retrying in different
+# forms -- `npm test` (4+ variants), one `git fetch origin main`, one
+# `find` across the filesystem -- none of which are granted or should be.
+# The agent wasn't blocked from succeeding; it was trying to *execute*
+# things (run the suite, search the filesystem) instead of *reading* them.
+# Both runs actually completed the full review and posted a real, useful
+# comment before erroring on the turn count -- so the "failure" was largely
+# cosmetic, but still wasted turns/cost. Fixed by telling the prompt
+# explicitly what is and isn't available and to evaluate tests by reading
+# them, not running them, instead of granting broader (and riskier) Bash
+# access.
