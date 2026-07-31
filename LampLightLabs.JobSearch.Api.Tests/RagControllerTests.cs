@@ -1,7 +1,9 @@
 using LampLightLabs.JobSearch.Api.Controllers;
 using LampLightLabs.JobSearch.Api.Models.Rag;
 using LampLightLabs.JobSearch.Api.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace LampLightLabs.JobSearch.Api.Tests;
@@ -15,6 +17,9 @@ namespace LampLightLabs.JobSearch.Api.Tests;
 /// </summary>
 public class RagControllerTests
 {
+    private static RagController MakeController(IRagMatchService service) =>
+        new(service, NullLogger<RagController>.Instance);
+
     // --- Validation ---
 
     [Fact]
@@ -22,7 +27,7 @@ public class RagControllerTests
     {
         var ct = TestContext.Current.CancellationToken;
         var mock = new Mock<IRagMatchService>();
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         var result = await controller.Match(new RagMatchRequest { JobDescription = "" }, ct);
 
@@ -34,7 +39,7 @@ public class RagControllerTests
     {
         var ct = TestContext.Current.CancellationToken;
         var mock = new Mock<IRagMatchService>();
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         var result = await controller.Match(new RagMatchRequest { JobDescription = "   " }, ct);
 
@@ -46,7 +51,7 @@ public class RagControllerTests
     {
         var ct = TestContext.Current.CancellationToken;
         var mock = new Mock<IRagMatchService>();
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         await controller.Match(new RagMatchRequest { JobDescription = "" }, ct);
 
@@ -62,7 +67,7 @@ public class RagControllerTests
         var mock = new Mock<IRagMatchService>();
         mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RagMatchResponse());
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         var result = await controller.Match(new RagMatchRequest { JobDescription = "Senior .NET Engineer" }, ct);
 
@@ -84,7 +89,7 @@ public class RagControllerTests
         };
         var mock = new Mock<IRagMatchService>();
         mock.Setup(s => s.MatchAsync("Senior .NET Engineer", ct)).ReturnsAsync(expected);
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         var result = await controller.Match(new RagMatchRequest { JobDescription = "Senior .NET Engineer" }, ct) as OkObjectResult;
 
@@ -103,7 +108,7 @@ public class RagControllerTests
         var mock = new Mock<IRagMatchService>();
         mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RagMatchResponse());
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         await controller.Match(new RagMatchRequest { JobDescription = "Backend .NET role at Acme Corp" }, ct);
 
@@ -120,7 +125,7 @@ public class RagControllerTests
         var mock = new Mock<IRagMatchService>();
         mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RagMatchResponse());
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         await controller.Match(
             new RagMatchRequest { JobDescription = "Senior\x00 .NET\x07  Engineer\twith Azure" }, ct);
@@ -134,7 +139,7 @@ public class RagControllerTests
         // A string of only control characters sanitizes to empty — should still be rejected.
         var ct = TestContext.Current.CancellationToken;
         var mock = new Mock<IRagMatchService>();
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         var result = await controller.Match(
             new RagMatchRequest { JobDescription = "\x00\x01\x02\x07" }, ct);
@@ -151,11 +156,91 @@ public class RagControllerTests
         var mock = new Mock<IRagMatchService>();
         mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RagMatchResponse());
-        var controller = new RagController(mock.Object);
+        var controller = MakeController(mock.Object);
 
         await controller.Match(
             new RagMatchRequest { JobDescription = "Requirements\n\n\n\nResponsibilities" }, ct);
 
         mock.Verify(s => s.MatchAsync("Requirements\n\nResponsibilities", ct), Times.Once);
+    }
+
+    // --- AI provider failure mapping ---
+
+    [Theory]
+    [InlineData(AiProviderFailureReason.Billing)]
+    [InlineData(AiProviderFailureReason.Unauthorized)]
+    [InlineData(AiProviderFailureReason.Unavailable)]
+    [InlineData(AiProviderFailureReason.Unknown)]
+    public async Task Match_AiProviderUnavailable_Returns503WithTryDemo(AiProviderFailureReason reason)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new AiProviderException("Anthropic", reason, "Provider failed."));
+        var controller = MakeController(mock.Object);
+
+        var result = await controller.Match(new RagMatchRequest { JobDescription = "Senior .NET Engineer" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task Match_AiProviderRateLimited_Returns429()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new AiProviderException("OpenAI", AiProviderFailureReason.RateLimited, "Rate limited."));
+        var controller = MakeController(mock.Object);
+
+        var result = await controller.Match(new RagMatchRequest { JobDescription = "Senior .NET Engineer" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task Match_AiProviderBillingFailure_ResponseDoesNotLeakProviderDetail()
+    {
+        // The security concern this guards against: SDK exception messages can carry
+        // account IDs, exact usage figures, or billing-page links. The response body
+        // must contain only the generic client-safe message, never ex.Message.
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        var providerMessage = "Org org_abc123 has exceeded its quota. See https://console.anthropic.com/billing for details.";
+        mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new AiProviderException("Anthropic", AiProviderFailureReason.Billing, providerMessage));
+        var controller = MakeController(mock.Object);
+
+        var result = await controller.Match(new RagMatchRequest { JobDescription = "Senior .NET Engineer" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        var body = Assert.IsAssignableFrom<object>(objectResult.Value);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(body);
+        Assert.DoesNotContain("org_abc123", serialized);
+        Assert.DoesNotContain("console.anthropic.com", serialized);
+        Assert.Contains("temporarily unavailable", serialized);
+        Assert.Contains("\"TryDemo\":true", serialized);
+    }
+
+    [Fact]
+    public async Task Match_UnexpectedException_Returns503WithTryDemoAndNoStackTrace()
+    {
+        // Safety net beyond the typed AiProviderException — any other unhandled failure
+        // (e.g. malformed LLM JSON) must still degrade gracefully, not leak a stack trace.
+        var ct = TestContext.Current.CancellationToken;
+        var mock = new Mock<IRagMatchService>();
+        mock.Setup(s => s.MatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("LLM returned an empty or unparseable response."));
+        var controller = MakeController(mock.Object);
+
+        var result = await controller.Match(new RagMatchRequest { JobDescription = "Senior .NET Engineer" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(objectResult.Value);
+        Assert.DoesNotContain("unparseable", serialized);
+        Assert.DoesNotContain("StackTrace", serialized);
     }
 }

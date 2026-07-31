@@ -1,4 +1,5 @@
 using Anthropic;
+using Anthropic.Exceptions;
 using Anthropic.Models.Messages;
 
 namespace LampLightLabs.JobSearch.Api.Services;
@@ -27,12 +28,12 @@ public class ClaudeChatService : IClaudeChatService
     /// <inheritdoc />
     public async Task<string> SendPromptAsync(string prompt, CancellationToken cancellationToken)
     {
-        var response = await _client.Messages.Create(new MessageCreateParams
+        var response = await CreateMessageAsync(new MessageCreateParams
         {
             Model = _model,
             MaxTokens = 1024,
             Messages = [new() { Role = Role.User, Content = prompt }]
-        }, cancellationToken: cancellationToken);
+        }, cancellationToken);
 
         return ExtractText(response);
     }
@@ -40,15 +41,66 @@ public class ClaudeChatService : IClaudeChatService
     /// <inheritdoc />
     public async Task<string> SendPromptAsync(string systemPrompt, string userMessage, CancellationToken cancellationToken)
     {
-        var response = await _client.Messages.Create(new MessageCreateParams
+        var response = await CreateMessageAsync(new MessageCreateParams
         {
             Model = _model,
             MaxTokens = 1024,
             System = systemPrompt,
             Messages = [new() { Role = Role.User, Content = userMessage }]
-        }, cancellationToken: cancellationToken);
+        }, cancellationToken);
 
         return ExtractText(response);
+    }
+
+    // Translates Anthropic SDK exceptions into AiProviderException so callers depend on an
+    // application-level failure reason rather than the Anthropic SDK's exception hierarchy —
+    // and never see the SDK's raw exception message, which can include account/billing detail.
+    private async Task<Message> CreateMessageAsync(MessageCreateParams parameters, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _client.Messages.Create(parameters, cancellationToken: cancellationToken);
+        }
+        catch (AnthropicForbiddenException ex) when (ex.Message.Contains("billing_error", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.Billing,
+                "The Claude API account has insufficient credits or another billing issue.",
+                ex);
+        }
+        catch (AnthropicForbiddenException ex)
+        {
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.Unauthorized,
+                "The Claude API rejected the request as forbidden.",
+                ex);
+        }
+        catch (AnthropicRateLimitException ex)
+        {
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.RateLimited,
+                "The Claude API rate limit was exceeded.",
+                ex);
+        }
+        catch (Anthropic5xxException ex)
+        {
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.Unavailable,
+                "The Claude API is temporarily unavailable.",
+                ex);
+        }
+        catch (AnthropicApiException ex)
+        {
+            throw new AiProviderException(
+                "Anthropic",
+                AiProviderFailureReason.Unknown,
+                "The Claude API returned an unexpected error.",
+                ex);
+        }
     }
 
     private static string ExtractText(Message response) =>

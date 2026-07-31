@@ -1,7 +1,9 @@
 using LampLightLabs.JobSearch.Api.Controllers.V2;
 using LampLightLabs.JobSearch.Api.Models.Sk;
 using LampLightLabs.JobSearch.Api.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace LampLightLabs.JobSearch.Api.Tests;
@@ -16,6 +18,9 @@ namespace LampLightLabs.JobSearch.Api.Tests;
 /// </summary>
 public class SemanticKernelControllerTests
 {
+    private static SemanticKernelController MakeController(ISemanticKernelChatService service) =>
+        new(service, NullLogger<SemanticKernelController>.Instance);
+
     // --- Validation ---
 
     [Fact]
@@ -24,7 +29,7 @@ public class SemanticKernelControllerTests
         // Arrange
         var ct = TestContext.Current.CancellationToken;
         var mockSemanticKernelChatService = new Mock<ISemanticKernelChatService>();
-        var controller = new SemanticKernelController(mockSemanticKernelChatService.Object);
+        var controller = MakeController(mockSemanticKernelChatService.Object);
         var request = new SkChatRequest { Prompt = "" };
 
         // Act
@@ -43,7 +48,7 @@ public class SemanticKernelControllerTests
         // Arrange
         var ct = TestContext.Current.CancellationToken;
         var mockSemanticKernelChatService = new Mock<ISemanticKernelChatService>();
-        var controller = new SemanticKernelController(mockSemanticKernelChatService.Object);
+        var controller = MakeController(mockSemanticKernelChatService.Object);
         var request = new SkChatRequest { Prompt = "   " };
 
         // Act
@@ -65,7 +70,7 @@ public class SemanticKernelControllerTests
             .Setup(s => s.SendPromptAsync("What is the capital of France?", ct))
             .ReturnsAsync("Paris is the capital of France.");
 
-        var controller = new SemanticKernelController(mockSemanticKernelChatService.Object);
+        var controller = MakeController(mockSemanticKernelChatService.Object);
         var request = new SkChatRequest { Prompt = "What is the capital of France?" };
 
         // Act
@@ -91,7 +96,7 @@ public class SemanticKernelControllerTests
             .Setup(s => s.SendPromptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("ok");
 
-        var controller = new SemanticKernelController(mockSemanticKernelChatService.Object);
+        var controller = MakeController(mockSemanticKernelChatService.Object);
         var request = new SkChatRequest { Prompt = "Hello, Semantic Kernel" };
 
         // Act
@@ -99,5 +104,61 @@ public class SemanticKernelControllerTests
 
         // Assert
         mockSemanticKernelChatService.Verify(s => s.SendPromptAsync("Hello, Semantic Kernel", ct), Times.Once);
+    }
+
+    // --- AI provider failure mapping ---
+
+    [Fact]
+    public async Task Chat_ProviderBillingFailure_Returns503WithoutLeakingProviderDetail()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var mockSemanticKernelChatService = new Mock<ISemanticKernelChatService>();
+        var providerMessage = "You exceeded your current quota, please check your plan and billing details.";
+        mockSemanticKernelChatService
+            .Setup(s => s.SendPromptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new AiProviderException("OpenAI", AiProviderFailureReason.Billing, providerMessage));
+        var controller = MakeController(mockSemanticKernelChatService.Object);
+
+        var result = await controller.Chat(new SkChatRequest { Prompt = "Hello, Semantic Kernel" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(objectResult.Value);
+        Assert.DoesNotContain("billing details", serialized);
+    }
+
+    [Fact]
+    public async Task Chat_ProviderRateLimited_Returns429()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var mockSemanticKernelChatService = new Mock<ISemanticKernelChatService>();
+        mockSemanticKernelChatService
+            .Setup(s => s.SendPromptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new AiProviderException("OpenAI", AiProviderFailureReason.RateLimited, "Rate limited."));
+        var controller = MakeController(mockSemanticKernelChatService.Object);
+
+        var result = await controller.Chat(new SkChatRequest { Prompt = "Hello, Semantic Kernel" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task Chat_UnexpectedException_Returns503WithoutStackTrace()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var mockSemanticKernelChatService = new Mock<ISemanticKernelChatService>();
+        mockSemanticKernelChatService
+            .Setup(s => s.SendPromptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Something internal broke at C:\\secret\\path.cs:42"));
+        var controller = MakeController(mockSemanticKernelChatService.Object);
+
+        var result = await controller.Chat(new SkChatRequest { Prompt = "Hello, Semantic Kernel" }, ct);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(objectResult.Value);
+        Assert.DoesNotContain("secret", serialized);
+        Assert.DoesNotContain("StackTrace", serialized);
     }
 }

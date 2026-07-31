@@ -195,7 +195,20 @@ h1 {
 /* ── Demo mode ─────────────────────────────────────────────────────── */
 
 .demo-section {
-  margin-bottom: 1.25rem;
+  margin: -0.5rem -0.5rem 0.75rem;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+}
+
+/* Draws attention here when a real API call fails and the server flags
+   tryDemo — gives a visitor a working alternative instead of a dead end. */
+.demo-section--highlight {
+  animation: demo-pulse 1.4s ease-in-out 2;
+}
+
+@keyframes demo-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 0%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--accent) 35%, transparent); }
 }
 
 .demo-label {
@@ -536,5 +549,10 @@ label {
 
   .score-gauge circle {
     transition: none;
+  }
+
+  .demo-section--highlight {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 45%, transparent);
   }
 }
