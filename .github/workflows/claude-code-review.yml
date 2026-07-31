@@ -52,7 +52,7 @@ jobs:
             inline comments for specific line-level issues. Do not push commits.
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 30
+            --max-turns 40
             --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),mcp__github_comment__update_claude_comment,mcp__github_inline_comment__create_inline_comment"
 
 # Setup required (one-time, done by Michael in GitHub, not by Claude):
@@ -100,3 +100,11 @@ jobs:
 # explicitly what is and isn't available and to evaluate tests by reading
 # them, not running them, instead of granting broader (and riskier) Bash
 # access.
+#
+# Cost fix, part 4 (2026-07-31): part 3 cut denials from 9 to 4 per run, but
+# verification runs on PR #37 still hit --max-turns 30 despite completing a
+# full, useful review both times (once fully, once correctly recognizing a
+# re-review had nothing new to add) -- the run status just showed "failure"
+# for what was functionally a success. Bumped to --max-turns 40 for headroom
+# so the status reflects reality; the denial/thrash fix in part 3 is what
+# actually mattered for cost, this is just clearing the remaining margin.
