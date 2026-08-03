@@ -1,5 +1,6 @@
 using Anthropic;
 using Anthropic.Exceptions;
+using Anthropic.Models;
 using Anthropic.Models.Messages;
 
 namespace LampLightLabs.JobSearch.Api.Services;
@@ -23,6 +24,15 @@ public class ClaudeChatService : IClaudeChatService
 
         _client = new AnthropicClient { ApiKey = apiKey };
         _model = configuration["Anthropic:Model"] ?? "claude-opus-4-8";
+    }
+
+    // Test-only seam: lets tests supply an AnthropicClient wired to a fake HttpClient so the
+    // real SDK exception-translation path (status code -> exception type -> ErrorType) can be
+    // exercised without a network call.
+    internal ClaudeChatService(AnthropicClient client, string model)
+    {
+        _client = client;
+        _model = model;
     }
 
     /// <inheritdoc />
@@ -55,13 +65,21 @@ public class ClaudeChatService : IClaudeChatService
     // Translates Anthropic SDK exceptions into AiProviderException so callers depend on an
     // application-level failure reason rather than the Anthropic SDK's exception hierarchy —
     // and never see the SDK's raw exception message, which can include account/billing detail.
+    //
+    // Insufficient credit balance comes back as HTTP 400 (AnthropicBadRequestException) with
+    // error.type "billing_error" in the response body, not HTTP 403 as you might guess from the
+    // name "billing". The SDK parses that body for every AnthropicApiException subtype and
+    // exposes it as the ErrorType property (see AnthropicExceptionFactory.ExtractErrorType), so
+    // matching on ex.ErrorType here catches the real failure regardless of which HTTP status
+    // Anthropic pairs it with, and won't misclassify an unrelated 400 (e.g. a malformed request,
+    // which comes back as error.type "invalid_request_error") as a billing issue.
     private async Task<Message> CreateMessageAsync(MessageCreateParams parameters, CancellationToken cancellationToken)
     {
         try
         {
             return await _client.Messages.Create(parameters, cancellationToken: cancellationToken);
         }
-        catch (AnthropicForbiddenException ex) when (ex.Message.Contains("billing_error", StringComparison.OrdinalIgnoreCase))
+        catch (AnthropicApiException ex) when (ex.ErrorType == ErrorType.BillingError)
         {
             throw new AiProviderException(
                 "Anthropic",
