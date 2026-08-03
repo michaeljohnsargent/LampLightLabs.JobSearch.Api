@@ -120,6 +120,7 @@ builder.Services.AddSingleton<IResumeVectorStoreService>(sp => sp.GetRequiredSer
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ResumeVectorStoreService>());
 builder.Services.AddSingleton<IPromptRepository, PromptRepository>();
 builder.Services.AddScoped<IRagMatchService, RagMatchService>();
+builder.Services.AddScoped<IUsageTrackingService, UsageTrackingService>();
 
 // CORS
 var allowedOrigins = builder.Configuration
