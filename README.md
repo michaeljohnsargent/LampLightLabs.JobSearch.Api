@@ -291,7 +291,7 @@ The frontend deploys to **Azure Static Web Apps**, with a GitHub Actions workflo
 
 ### Theme System
 
-Five themes — **Professional**, **Bold**, **Minimal**, **Claude Dark**, and **Claude Light** — switchable via `ThemeSwitcher.tsx`. Selecting a theme sets a `data-theme` attribute on the document root, which drives a set of CSS custom properties (`--bg`, `--surface`, `--surface-raised`, `--border`, `--text`, `--muted`, `--accent`, `--accent-hover`, `--font`, `--radius`, plus semantic score/status colors) defined per-theme in `App.css`.
+Two themes — **Claude Dark** and **Claude Light** — switchable via `ThemeSwitcher.tsx`. Selecting a theme sets a `data-theme` attribute on the document root, which drives a set of CSS custom properties (`--bg`, `--surface`, `--surface-raised`, `--border`, `--text`, `--muted`, `--accent`, `--accent-hover`, `--font`, `--radius`, plus semantic score/status colors) defined per-theme in `App.css`.
 
 The Claude Dark/Claude Light pair was added 7/30/2026 as a deliberate homage to Claude's actual design language — the clay/terracotta accent (`#d97757`) is intentional, not a random color choice.
 
