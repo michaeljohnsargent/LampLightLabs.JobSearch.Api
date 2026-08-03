@@ -14,11 +14,16 @@ namespace LampLightLabs.JobSearch.Api.Controllers;
 public class RagController : ControllerBase
 {
     private readonly IRagMatchService _ragMatchService;
+    private readonly IUsageTrackingService _usageTrackingService;
     private readonly ILogger<RagController> _logger;
 
-    public RagController(IRagMatchService ragMatchService, ILogger<RagController> logger)
+    public RagController(
+        IRagMatchService ragMatchService,
+        IUsageTrackingService usageTrackingService,
+        ILogger<RagController> logger)
     {
         _ragMatchService = ragMatchService;
+        _usageTrackingService = usageTrackingService;
         _logger = logger;
     }
 
@@ -33,9 +38,27 @@ public class RagController : ControllerBase
         if (string.IsNullOrWhiteSpace(sanitized))
             return BadRequest(new { Error = "JobDescription is required." });
 
+        // Demo/production toggle and cost circuit breaker share one decision point — both mean
+        // "don't run the real pipeline" and degrade to the exact same response shape the client
+        // already knows how to handle (shows the canned demo buttons).
+        if (await _usageTrackingService.ShouldServeDemoAsync(cancellationToken))
+            return DemoUnavailableResult();
+
         try
         {
             var result = await _ragMatchService.MatchAsync(sanitized, cancellationToken);
+
+            try
+            {
+                await _usageTrackingService.LogUsageAsync("api/rag/match", cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Never fail a successful match response because usage tracking couldn't write —
+                // the user already got their result, this is purely internal bookkeeping.
+                _logger.LogWarning(ex, "Failed to log usage for job description hash {Hash}", HashForLogging(sanitized));
+            }
+
             return Ok(result);
         }
         catch (AiProviderException ex) when (ex.Reason == AiProviderFailureReason.RateLimited)
@@ -52,11 +75,7 @@ public class RagController : ControllerBase
             // The demo buttons give a visitor a working alternative instead of a dead end.
             _logger.LogError(ex, "RAG match failed for job description hash {Hash}: {Provider} unavailable ({Reason})",
                 HashForLogging(sanitized), ex.Provider, ex.Reason);
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                Error = "This demo is temporarily unavailable. Try a sample result below while it's back.",
-                TryDemo = true
-            });
+            return DemoUnavailableResult();
         }
         catch (Exception ex)
         {
@@ -64,13 +83,29 @@ public class RagController : ControllerBase
             // client, even for failures unrelated to the AI providers above (e.g. malformed LLM
             // output that fails to parse).
             _logger.LogError(ex, "RAG match failed unexpectedly for job description hash {Hash}", HashForLogging(sanitized));
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                Error = "This demo is temporarily unavailable. Try a sample result below while it's back.",
-                TryDemo = true
-            });
+            return DemoUnavailableResult();
         }
     }
+
+    [HttpGet("usage")]
+    [DisableRateLimiting]
+    public async Task<IActionResult> Usage(CancellationToken cancellationToken)
+    {
+        var summary = await _usageTrackingService.GetCurrentMonthSummaryAsync(cancellationToken);
+        return Ok(new UsageSummaryResponse
+        {
+            TotalCostUsd = summary.TotalCostUsd,
+            PercentOfBudgetUsed = summary.PercentOfBudgetUsed,
+            HasHitHardCeiling = summary.HasHitHardCeiling
+        });
+    }
+
+    private ObjectResult DemoUnavailableResult() =>
+        StatusCode(StatusCodes.Status503ServiceUnavailable, new
+        {
+            Error = "This demo is temporarily unavailable. Try a sample result below while it's back.",
+            TryDemo = true
+        });
 
     // Short, non-reversible correlation id for logs — avoids logging the job description text itself.
     private static string HashForLogging(string input) =>

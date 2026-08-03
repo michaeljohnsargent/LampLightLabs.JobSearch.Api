@@ -94,6 +94,7 @@ A `ViteDev` CORS policy allows `http://localhost:5173` (the Vite dev server defa
 | Method | Route | Auth | Description |
 |---|---|---|---|
 | POST | `/api/rag/match` | None | Accepts a job description and returns a structured resume match analysis: score (0–100), narrative summary, strengths, gaps, and the retrieved resume chunks |
+| GET | `/api/rag/usage` | None | Returns the current calendar month's logged usage: total estimated cost, percent of the soft monthly budget used, and whether the hard ceiling has been hit. Exempt from rate limiting (`[DisableRateLimiting]`) since it's a cheap read that shouldn't compete with the `ai-token-bucket` budget meant for actual match calls |
 
 **Request: POST /api/rag/match**
 ```json
@@ -105,6 +106,8 @@ A `ViteDev` CORS policy allows `http://localhost:5173` (the Vite dev server defa
 > Requires `OpenAI:ApiKey` (embeddings via `text-embedding-3-small`) and `Anthropic:ApiKey` (generation via Claude) set in user secrets. See **Running Locally** for setup.
 
 > **Upstream failures never reach the client raw.** If the Anthropic or OpenAI call underneath any of the three AI endpoints above fails (quota/billing exhaustion, rate limit, 5xx), the full exception is logged server-side and the client gets back a generic message — `429` for a genuine rate limit, `503` otherwise — never the SDK's raw exception text (which can carry account IDs, usage figures, or billing-page links) or a stack trace. `/api/rag/match`'s `503` also sets `"tryDemo": true` so the frontend can point a visitor at the demo instead of a dead end. See **Key Design Decisions**.
+
+> **Cost safety net.** Every real (non-demo) `/api/rag/match` call that actually runs the pipeline logs an estimated cost via `IUsageTrackingService`, backed by a new `UsageLogs` table (same `JobSearchDbContext`/Postgres setup as everything else — no new infrastructure). `UsageTracking:DemoModeOnly` (config, defaults `true`) and a hard-ceiling circuit breaker (`UsageTracking:MonthlyHardCeilingUsd`, checked against the current month's logged total) both short-circuit `/api/rag/match` to the same `503 { tryDemo: true }` response described above — without calling the real pipeline or logging a cost — via one decision point, `IUsageTrackingService.ShouldServeDemoAsync`. That check fails closed: if the usage query itself fails, it serves demo rather than risk unmetered spend. `DemoModeOnly` must be verified and flipped to `false` manually after confirming tracking works in production; it does not flip itself. See **Key Design Decisions**.
 
 **Response:**
 ```json
@@ -299,7 +302,9 @@ The Claude Dark/Claude Light pair was added 7/30/2026 as a deliberate homage to 
 
 Three buttons — "See a strong match," "See a partial match," "See a weak match" — populate the same results UI with realistic hardcoded fixture data instead of calling the API. This is a deliberate cost-conscious design decision, not a limitation: it lets visitors see the app's full functionality, including all three score bands, without spending real API credits on every page view.
 
-Demo mode also doubles as the fallback when the real `/api/rag/match` call fails: if the backend reports the failure was on the AI-provider side (`tryDemo: true` in the error response — see **Endpoints** → RAG), the app scrolls to and briefly highlights this section so a visitor who hits a real outage still has a working alternative.
+Demo mode also doubles as the fallback when the real `/api/rag/match` call fails: if the backend reports the failure was on the AI-provider side (`tryDemo: true` in the error response — see **Endpoints** → RAG), the app scrolls to and briefly highlights this section so a visitor who hits a real outage still has a working alternative. The same `tryDemo: true` response is also what the backend's `DemoModeOnly` toggle and cost circuit breaker return — from the frontend's perspective a budget-triggered short-circuit and a real outage look identical, which is intentional (see **Endpoints** → RAG).
+
+A small `UsageBadge` component polls `GET /api/rag/usage` on load and renders nothing unless usage is actually worth surfacing — a warning once 80% of the soft monthly budget is used, a stronger message once the hard ceiling (and demo-only mode) kicks in.
 
 ### Live URLs
 
@@ -319,10 +324,10 @@ LampLightLabs.JobSearch.Api/
 ├── Attributes/
 │   └── ApiKeyAuthAttribute.cs          - IAuthorizationFilter for API key validation
 ├── Data/
-│   └── JobSearchDbContext.cs           - EF Core DbContext for JobRecord (Postgres via Npgsql), registered Scoped
+│   └── JobSearchDbContext.cs           - EF Core DbContext for JobRecord and UsageLog (Postgres via Npgsql), registered Scoped
 ├── Controllers/
 │   ├── OAuthController.cs              - POST /oauth/token (outside versioning)
-│   ├── RagController.cs                - POST /api/rag/match (outside versioning)
+│   ├── RagController.cs                - POST /api/rag/match, GET /api/rag/usage (outside versioning)
 │   ├── V1/
 │   │   ├── ApplicationsController.cs   - Returns raw CSV data (v1)
 │   │   ├── AuthController.cs           - POST /api/v1/auth/token (JWT issuance)
@@ -347,7 +352,9 @@ LampLightLabs.JobSearch.Api/
 │   │   └── OAuthTokenResponse.cs       - access_token, token_type, expires_in, scope
 │   ├── Rag/
 │   │   ├── RagMatchRequest.cs          - Request body: JobDescription string
-│   │   └── RagMatchResponse.cs         - Response: MatchScore, Summary, Strengths, Gaps, RetrievedContext
+│   │   ├── RagMatchResponse.cs         - Response: MatchScore, Summary, Strengths, Gaps, RetrievedContext
+│   │   └── UsageSummaryResponse.cs     - Response: TotalCostUsd, PercentOfBudgetUsed, HasHitHardCeiling
+│   ├── UsageLog.cs                     - Entity: Id, Timestamp, Endpoint, EstimatedCostUsd (one row per real pipeline call)
 │   ├── Sk/
 │   │   ├── SkChatRequest.cs            - Request body for POST /api/sk/chat (Prompt)
 │   │   └── SkChatResponse.cs           - Response body for POST /api/sk/chat (Response)
@@ -384,7 +391,9 @@ LampLightLabs.JobSearch.Api/
 │   ├── StatusCategorizerService.cs     - Extracted from controller; covered by characterization tests
 │   ├── IJobStore.cs                    - Job store interface (Strategy Pattern contract)
 │   ├── JobStore.cs                     - Thread-safe in-memory implementation (Singleton-safe, ConcurrentDictionary-backed)
-│   └── EfJobStore.cs                   - EF Core/Postgres implementation (Scoped, production default)
+│   ├── EfJobStore.cs                   - EF Core/Postgres implementation (Scoped, production default)
+│   ├── IUsageTrackingService.cs        - Usage tracking interface + UsageSummary record
+│   └── UsageTrackingService.cs         - EF Core/Postgres-backed logging, monthly summary, and demo/circuit-breaker decision (Scoped)
 ├── TestData/
 │   └── applications.csv                - Live job search pipeline data
 └── Program.cs                          - DI registration and middleware
@@ -535,6 +544,10 @@ The embedding model (`text-embedding-3-small`) and chat model (`gpt-4o-mini`) ar
 **Production CORS origins live in `appsettings.json`, not an Azure App Service override** - `Cors:AllowedOrigins` only ever contained `http://localhost:5173`, so the live frontend's "Analyze match" button failed with a browser-blocked CORS error - the first bug Larry (a friend testing the deployed demo) actually hit. The fix adds `https://match.lamplightlabs.com` and `https://blue-coast-05842a60f.7.azurestaticapps.net` (the custom domain and its underlying Azure Static Web Apps origin) directly to `appsettings.json`, matching the existing `RateLimiting` section rather than the `Jwt`/`ApiKey`/`BasicAuth`/`Anthropic`/`OpenAI` pattern of placeholder-plus-user-secrets: allowed origins aren't sensitive (any browser can already read them off a CORS preflight response), so there's nothing to protect by moving them to an Azure App Service configuration override, and keeping them in source means a new origin is a normal code review instead of an out-of-band portal change nobody else can see. This was deliberately held until **AI provider failures are translated, not propagated** and **Anthropic billing-error detection matches on `ErrorType`** were both live, so opening the endpoint to a real public origin wouldn't risk a real visitor hitting a raw unhandled error - the custom domain itself had already been live since 2026-07-30 and was never the actual cause.
 
 **Post-merge correction (2026-08-03): a stale Azure App Service override was silently shadowing the fix above** - the PR deployed cleanly, but `match.lamplightlabs.com` still got a browser CORS error, with the preflight `OPTIONS` response missing `Access-Control-Allow-Origin` entirely despite returning `204`. Root cause, found via `az webapp config appsettings list`: `Cors__AllowedOrigins__0`/`__1` (`http://localhost:5173` and the Static Web Apps origin, but not the custom domain) had been set directly as Azure App Service Application Settings since initial deployment, alongside the real secrets (`Jwt__Key`, `Anthropic__ApiKey`, etc.) that are *supposed* to live there. ASP.NET Core's configuration precedence puts environment variables (what App Service settings become) above `appsettings.json`, so that stale array completely overrode the source-controlled one - the code and the "keep it in source, not the portal" reasoning above were both correct, but a second, forgotten copy of the same config was silently winning. Fixed by deleting `Cors__AllowedOrigins__0`/`__1` from the App Service via `az webapp config appsettings delete`, restoring `appsettings.json` as the actual single source of truth, then confirmed with a direct `curl -X OPTIONS` preflight against the live API for all three origins. Worth remembering: this app's initial Azure setup mirrored *every* config section into App Service settings, not just secrets - if a future config value in `appsettings.json` doesn't seem to be taking effect in production, check `az webapp config appsettings list` for a same-named override before assuming the code is wrong.
+
+**Usage tracking, the demo toggle, and the cost circuit breaker share one decision point** - `/api/rag/match` went live to a real public origin via the CORS fix above with no cost safety net: a traffic burst could run up an unbounded Anthropic bill. `IUsageTrackingService.ShouldServeDemoAsync` is the single check `RagController.Match` makes before touching the real pipeline — it returns `true` (serve the existing `503 { tryDemo: true }` response, same shape the frontend already handles for a genuine provider outage) if `UsageTracking:DemoModeOnly` is on, or if the current calendar month's logged cost has reached `UsageTracking:MonthlyHardCeilingUsd`. Reusing the existing outage response shape meant zero new frontend match-flow code was needed — a budget-triggered short-circuit and a real Anthropic outage look identical to a visitor, which is the point. The check fails closed: if the usage query itself throws (e.g. the database is unreachable), it serves demo rather than risk unmetered spend, since the entire purpose of this service is a safety net, not a nice-to-have. `DemoModeOnly` defaults to `true` on first deploy and must be flipped to `false` manually after the toggle and tracking are verified in production - it does not flip itself.
+
+**A flat per-call cost estimate, not real Anthropic token usage** - `UsageLog.EstimatedCostUsd` comes from a configured flat `UsageTracking:EstimatedCostPerCallUsd`, not the actual input/output token counts Anthropic returns per request. `IClaudeChatService`/`ClaudeChatService` don't currently surface token usage from the SDK response (`ExtractText` only reads the `TextBlock` content), and wiring that through would mean changing a public service interface and every caller for a precision improvement the budget/ceiling math doesn't need - a flat estimate is enough to trip a circuit breaker at roughly the right spend level. If per-call cost ever needs to track actual spend exactly, `Message.Usage` from the Anthropic SDK response is the place to start.
 
 **Two Claude Code hooks scope what the agent can touch and when a turn is "done"** - `.claude/settings.json` wires up:
 - A `PreToolUse` hook (`block-secrets.js`) on `Read`/`Edit`/`Write` that blocks any `appsettings.*.json` override (e.g. `appsettings.Development.json`) or `.env`/`.env.*` file by filename, regardless of directory. The base `appsettings.json` is exempted — it only ever holds placeholder values (see **AI Integration**, **Semantic Kernel Integration**) — so the agent can still read the shape of the config without a path to real secrets, which live only in user secrets or an environment-specific override file.

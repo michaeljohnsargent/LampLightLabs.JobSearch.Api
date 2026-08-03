@@ -25,6 +25,8 @@ namespace LampLightLabs.JobSearch.Api.Data
 
         public DbSet<JobRecord> Jobs => Set<JobRecord>();
 
+        public DbSet<UsageLog> UsageLogs => Set<UsageLog>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<JobRecord>(entity =>
@@ -41,6 +43,12 @@ namespace LampLightLabs.JobSearch.Api.Data
                 entity.Property(j => j.Status).HasConversion<string>().HasMaxLength(32);
 
                 entity.Property(j => j.Result).HasMaxLength(2000);
+            });
+
+            modelBuilder.Entity<UsageLog>(entity =>
+            {
+                entity.Property(u => u.Endpoint).HasMaxLength(128);
+                entity.Property(u => u.EstimatedCostUsd).HasPrecision(10, 4);
             });
         }
     }
