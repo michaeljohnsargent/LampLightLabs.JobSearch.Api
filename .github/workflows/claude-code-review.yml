@@ -24,6 +24,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: true
+          show_full_output: true # TEMPORARY — diagnosing recurring permission_denials_count (0-9/run, uncorrelated with diff size); revert once found
           prompt: |
             Review this pull request against the architecture and conventions
             documented in CLAUDE.md (versioning structure, auth schemes, the
