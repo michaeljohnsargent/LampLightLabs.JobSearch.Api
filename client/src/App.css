@@ -290,6 +290,28 @@ label {
   transition: transform 0.15s;
 }
 
+/* ── Usage badge ───────────────────────────────────────────────────── */
+
+.usage-badge {
+  margin-top: 1rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.usage-badge--warning {
+  border: 1px solid var(--warning);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.usage-badge--destructive {
+  border: 1px solid var(--destructive);
+  background: var(--destructive-bg);
+  color: var(--destructive);
+}
+
 /* ── Error ─────────────────────────────────────────────────────────── */
 
 .error-box {

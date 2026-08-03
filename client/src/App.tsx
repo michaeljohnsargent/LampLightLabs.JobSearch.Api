@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
 import ThemeSwitcher, { type Theme } from './ThemeSwitcher'
 import ScoreGauge from './ScoreGauge'
+import UsageBadge from './UsageBadge'
 import SkillChip from './SkillChip'
 import Message from './Message'
 import { UserContext } from './UserContext'
@@ -145,6 +146,7 @@ export default function App() {
           <UserContext.Provider value={{ name: applicant, message: 'Welcome to the Resume Match Analyzer!' }}>
             <Message />
           </UserContext.Provider>
+          <UsageBadge />
         </header>
 
         <div
