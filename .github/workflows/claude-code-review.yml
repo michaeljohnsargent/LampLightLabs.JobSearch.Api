@@ -24,6 +24,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: true
+          show_full_output: true # TEMPORARY — diagnosing recurring permission_denials_count (0-9/run, uncorrelated with diff size). Prior attempts to flip this within the reviewed PR itself (PR #40, PR #48) were both blocked by claude-code-action's anti-tampering check (a pull_request-triggered workflow won't run a modified copy of itself). Merging this directly to main so a separate, workflow-untouched PR can trigger a real instrumented run. Revert once found.
           prompt: |
             Review this pull request against the architecture and conventions
             documented in CLAUDE.md (versioning structure, auth schemes, the
