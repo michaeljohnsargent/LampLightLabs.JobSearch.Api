@@ -24,7 +24,6 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: true
-          show_full_output: true # TEMPORARY — diagnosing recurring permission_denials_count (0-9/run, uncorrelated with diff size). Prior attempts to flip this within the reviewed PR itself (PR #40, PR #48) were both blocked by claude-code-action's anti-tampering check (a pull_request-triggered workflow won't run a modified copy of itself). Merging this directly to main so a separate, workflow-untouched PR can trigger a real instrumented run. Revert once found.
           prompt: |
             Review this pull request against the architecture and conventions
             documented in CLAUDE.md (versioning structure, auth schemes, the
@@ -109,3 +108,27 @@ jobs:
 # for what was functionally a success. Bumped to --max-turns 40 for headroom
 # so the status reflects reality; the denial/thrash fix in part 3 is what
 # actually mattered for cost, this is just clearing the remaining margin.
+#
+# Denial root cause, corrected (2026-08-04): part 3's claim of having diagnosed the denied
+# commands via a show_full_output run on PR #40 was never actually true -- that run (and a
+# second attempt, PR #48) were both silently blocked before executing by claude-code-action's
+# anti-tampering check, which refuses to run a pull_request-triggered workflow's own
+# modified-in-that-PR copy of itself. Neither run produced any transcript. Confirmed by merging
+# show_full_output: true to main for real (PR #49) and triggering a separate, workflow-untouched
+# PR (#50) to get a genuine instrumented run. Root cause: this repo's `.claude/hooks/run-tests.js`
+# Stop hook runs `dotnet test`/`npm test` after every turn, including inside this Action's own
+# session -- and in the GitHub Actions runner specifically (not reproducible locally), 5
+# ClaudeChatServiceTests fail with a UriBuilder/malformed-URI error inside the Anthropic .NET SDK.
+# No workflow in this repo runs `dotnet test` in CI, so this failure was invisible until this
+# diagnosis. The agent correctly reasoned four separate times that the failure was pre-existing,
+# unrelated to its read-only review task, and out of scope -- but the hook has no way to accept
+# that answer; it re-injects the same failure as "Stop hook feedback" on every turn regardless,
+# so the agent kept trying to investigate it anyway, attempting `dotnet test`/`find` (all denied,
+# not in --allowedTools) before eventually hitting --max-turns. This also explains the lack of
+# correlation with diff size noted earlier (PR #46 pure CSS: 5 denials; PR #45 docs-only: 0) --
+# it was never about the diff, it's whether this pre-existing CI-only test failure and the Stop
+# hook's retrigger loop happen to fire during that particular run. Not fixed in this pass
+# (diagnosis only) -- the actual fix needs to happen in one of: (a) the Stop hook, to stop
+# forcing unrelated agents into a fix-it loop for a pre-existing failure outside their task's
+# scope, or (b) the ClaudeChatServiceTests/Anthropic SDK URI construction itself, to fix the
+# runner-environment-only failure at its source.
