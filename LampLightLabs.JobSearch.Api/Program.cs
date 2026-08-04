@@ -120,6 +120,7 @@ builder.Services.AddSingleton<IResumeVectorStoreService>(sp => sp.GetRequiredSer
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ResumeVectorStoreService>());
 builder.Services.AddSingleton<IPromptRepository, PromptRepository>();
 builder.Services.AddScoped<IRagMatchService, RagMatchService>();
+// Usage tracking backs the demo/production toggle and cost circuit breaker for /api/rag/match.
 builder.Services.AddScoped<IUsageTrackingService, UsageTrackingService>();
 
 // CORS
