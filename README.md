@@ -292,6 +292,12 @@ The `client/` directory contains **Resume Match Analyzer**, a React + TypeScript
 
 The frontend deploys to **Azure Static Web Apps**, with a GitHub Actions workflow (`.github/workflows/azure-static-web-apps-blue-coast-05842a60f.yml`) that builds and deploys on every push to `main`. This is the same push-to-`main` CI/CD pattern the backend uses for its own deployment to Azure Web App (`.github/workflows/main_lamplightlabs-api.yml`) — both halves of this project ship the same way.
 
+**Flipping `DemoModeOnly` off in production** (see **Usage tracking, the demo toggle, and the cost circuit breaker share one decision point** in Key Design Decisions) is deliberately an Azure CLI action, not an in-app control or admin endpoint — nothing reachable by a visitor can turn on real, budget-spending API calls. Same App Service Application Setting override mechanism as the CORS override incident above (`UsageTracking:DemoModeOnly` → `UsageTracking__DemoModeOnly`, since ASP.NET Core's env-var config binding maps `:` to `__`):
+```
+az webapp config appsettings set --name lamplightlabs-api --resource-group <resource-group> --settings UsageTracking__DemoModeOnly=false
+```
+To revert to the `appsettings.json` default (`true`), delete the override rather than setting it back explicitly, so `appsettings.json` stays the actual source of truth: `az webapp config appsettings delete --name lamplightlabs-api --resource-group <resource-group> --setting-names UsageTracking__DemoModeOnly`.
+
 ### Theme System
 
 Two themes — **Claude Dark** and **Claude Light** — switchable via `ThemeSwitcher.tsx`. Selecting a theme sets a `data-theme` attribute on the document root, which drives a set of CSS custom properties (`--bg`, `--surface`, `--surface-raised`, `--border`, `--text`, `--muted`, `--accent`, `--accent-hover`, `--font`, `--radius`, plus semantic score/status colors) defined per-theme in `App.css`.
