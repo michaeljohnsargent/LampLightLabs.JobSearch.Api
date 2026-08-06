@@ -231,7 +231,9 @@ public class RagControllerTests
         var serialized = System.Text.Json.JsonSerializer.Serialize(body);
         Assert.DoesNotContain("org_abc123", serialized);
         Assert.DoesNotContain("console.anthropic.com", serialized);
-        Assert.Contains("Live analysis is limited to manage API costs", serialized);
+        // Genuine AI-provider failure — must use the honest "something went wrong" copy, not the
+        // demo-toggle/circuit-breaker's cost-management framing (nothing about this was a cost limit).
+        Assert.Contains("Something went wrong on our end", serialized);
         Assert.Contains("\"TryDemo\":true", serialized);
     }
 
@@ -253,6 +255,9 @@ public class RagControllerTests
         var serialized = System.Text.Json.JsonSerializer.Serialize(objectResult.Value);
         Assert.DoesNotContain("unparseable", serialized);
         Assert.DoesNotContain("StackTrace", serialized);
+        // Genuine unexpected failure — same honest copy as the AI-provider-exception path, not the
+        // cost-management framing (this isn't a deliberate cost limit, it's an actual bug/failure).
+        Assert.Contains("Something went wrong on our end", serialized);
     }
 
     // --- Demo-toggle / circuit-breaker short-circuit ---
@@ -272,6 +277,9 @@ public class RagControllerTests
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
         var serialized = System.Text.Json.JsonSerializer.Serialize(objectResult.Value);
         Assert.Contains("\"TryDemo\":true", serialized);
+        // Deliberate demo-toggle/circuit-breaker path — must use the cost-management copy, not the
+        // genuine-failure "something went wrong" message (nothing actually failed here).
+        Assert.Contains("Live analysis is limited to manage API costs", serialized);
     }
 
     [Fact]
