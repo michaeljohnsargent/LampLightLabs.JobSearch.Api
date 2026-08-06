@@ -103,7 +103,7 @@ public class RagController : ControllerBase
     private ObjectResult DemoUnavailableResult() =>
         StatusCode(StatusCodes.Status503ServiceUnavailable, new
         {
-            Error = "This demo is temporarily unavailable. Try a sample result below while it's back.",
+            Error = "Live analysis is limited to manage API costs. Try a sample result above to see how it works.",
             TryDemo = true
         });
 

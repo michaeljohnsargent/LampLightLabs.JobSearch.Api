@@ -231,7 +231,7 @@ public class RagControllerTests
         var serialized = System.Text.Json.JsonSerializer.Serialize(body);
         Assert.DoesNotContain("org_abc123", serialized);
         Assert.DoesNotContain("console.anthropic.com", serialized);
-        Assert.Contains("temporarily unavailable", serialized);
+        Assert.Contains("Live analysis is limited to manage API costs", serialized);
         Assert.Contains("\"TryDemo\":true", serialized);
     }
 
