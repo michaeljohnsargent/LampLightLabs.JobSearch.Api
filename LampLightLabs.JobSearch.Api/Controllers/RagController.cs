@@ -42,7 +42,7 @@ public class RagController : ControllerBase
         // "don't run the real pipeline" and degrade to the exact same response shape the client
         // already knows how to handle (shows the canned demo buttons).
         if (await _usageTrackingService.ShouldServeDemoAsync(cancellationToken))
-            return DemoUnavailableResult();
+            return DemoUnavailableResult(costLimited: true);
 
         try
         {
@@ -75,7 +75,7 @@ public class RagController : ControllerBase
             // The demo buttons give a visitor a working alternative instead of a dead end.
             _logger.LogError(ex, "RAG match failed for job description hash {Hash}: {Provider} unavailable ({Reason})",
                 HashForLogging(sanitized), ex.Provider, ex.Reason);
-            return DemoUnavailableResult();
+            return DemoUnavailableResult(costLimited: false);
         }
         catch (Exception ex)
         {
@@ -83,7 +83,7 @@ public class RagController : ControllerBase
             // client, even for failures unrelated to the AI providers above (e.g. malformed LLM
             // output that fails to parse).
             _logger.LogError(ex, "RAG match failed unexpectedly for job description hash {Hash}", HashForLogging(sanitized));
-            return DemoUnavailableResult();
+            return DemoUnavailableResult(costLimited: false);
         }
     }
 
@@ -100,10 +100,16 @@ public class RagController : ControllerBase
         });
     }
 
-    private ObjectResult DemoUnavailableResult() =>
+    // costLimited distinguishes the deliberate demo-toggle/circuit-breaker path (ShouldServeDemoAsync
+    // returned true, nothing actually failed) from a genuine outage/unexpected exception — the two
+    // situations need different, honest copy, but share the same response shape (Error + TryDemo) so
+    // the client's existing scroll-to-demo-section handling needs no changes either way.
+    private ObjectResult DemoUnavailableResult(bool costLimited) =>
         StatusCode(StatusCodes.Status503ServiceUnavailable, new
         {
-            Error = "This demo is temporarily unavailable. Try a sample result below while it's back.",
+            Error = costLimited
+                ? "Live analysis is limited to manage API costs. Try a sample result above to see how it works."
+                : "Something went wrong on our end. Try a sample result above while we look into it.",
             TryDemo = true
         });
 
