@@ -294,9 +294,9 @@ The frontend deploys to **Azure Static Web Apps**, with a GitHub Actions workflo
 
 **Flipping `DemoModeOnly` off in production** (see **Usage tracking, the demo toggle, and the cost circuit breaker share one decision point** in Key Design Decisions) is deliberately an Azure CLI action, not an in-app control or admin endpoint — nothing reachable by a visitor can turn on real, budget-spending API calls. Same App Service Application Setting override mechanism as the CORS override incident above (`UsageTracking:DemoModeOnly` → `UsageTracking__DemoModeOnly`, since ASP.NET Core's env-var config binding maps `:` to `__`):
 ```
-az webapp config appsettings set --name lamplightlabs-api --resource-group <resource-group> --settings UsageTracking__DemoModeOnly=false
+az webapp config appsettings set --name lamplightlabs-api --resource-group lamplightlabs-rg --settings UsageTracking__DemoModeOnly=false
 ```
-To revert to the `appsettings.json` default (`true`), delete the override rather than setting it back explicitly, so `appsettings.json` stays the actual source of truth: `az webapp config appsettings delete --name lamplightlabs-api --resource-group <resource-group> --setting-names UsageTracking__DemoModeOnly`.
+To revert to the `appsettings.json` default (`true`), delete the override rather than setting it back explicitly, so `appsettings.json` stays the actual source of truth: `az webapp config appsettings delete --name lamplightlabs-api --resource-group lamplightlabs-rg --setting-names UsageTracking__DemoModeOnly`.
 
 ### Theme System
 
