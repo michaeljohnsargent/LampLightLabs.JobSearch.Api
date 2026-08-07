@@ -21,6 +21,12 @@ jobs:
 
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
+        env:
+          # Exempts this read-only review session from the .claude/hooks/run-tests.js Stop hook
+          # (see that file's comment for why) — this workflow is already explicitly forbidden
+          # from running the test suite or making code changes, so the hook has nothing to
+          # protect here and can only cost turns.
+          SKIP_TEST_HOOK: "true"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: true
@@ -132,3 +138,13 @@ jobs:
 # forcing unrelated agents into a fix-it loop for a pre-existing failure outside their task's
 # scope, or (b) the ClaudeChatServiceTests/Anthropic SDK URI construction itself, to fix the
 # runner-environment-only failure at its source.
+#
+# Denial fix, part (a) applied (2026-08-07): SKIP_TEST_HOOK: "true" (env, above) exempts this
+# workflow's session from .claude/hooks/run-tests.js entirely -- see that file's comment. This
+# workflow was already explicitly forbidden from running the test suite or making code changes,
+# so the hook could only ever cost turns here, never protect anything. Confirmed the failure mode
+# still recurring as of PR #53 (run 31176243123, 2026-08-07: review completed and posted
+# successfully in ~8 turns, then hit error_max_turns at turn 41 anyway, $1.61/4 denials) --
+# same shape as the original diagnosis. Part (b), the actual ClaudeChatServiceTests/SDK bug, is
+# unaffected by this change and still open; test-suite.yml (added 2026-08-04) surfaces it on
+# every PR independently now, so it no longer needs this workflow to accidentally trip over it.
