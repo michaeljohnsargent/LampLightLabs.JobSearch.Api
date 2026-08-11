@@ -309,7 +309,7 @@ sequenceDiagram
 
     Browser->>API: POST /api/rag/match (job description)
     API->>API: Sanitize input
-    API->>OpenAI: Embed JD + resume
+    API->>OpenAI: Embed JD
     OpenAI-->>API: Embedding vectors
     API->>API: Cosine similarity search
     API->>Claude: Generate structured match report
