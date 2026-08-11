@@ -169,6 +169,24 @@ Machine-to-machine auth. A client application authenticates with its client_id a
 - Clients configured in `appsettings.json` under `OAuthClients`
 - Token claims: `sub` (clientId), `client_id`, `scope`, `jti`, `exp`
 
+```mermaid
+sequenceDiagram
+    participant Client
+    participant OAuthController
+    participant OAuthClientService
+    participant TokenService
+    participant API as Protected endpoint
+
+    Client->>OAuthController: POST /oauth/token (client_id, client_secret)
+    OAuthController->>OAuthClientService: Validate credentials
+    OAuthClientService-->>OAuthController: Valid, client scope resolved
+    OAuthController->>TokenService: Issue token (client_id claim, no user)
+    TokenService-->>OAuthController: Signed JWT
+    OAuthController-->>Client: 200 OK + access_token
+    Client->>API: Request + Bearer token
+    API-->>Client: 200 OK (authorized)
+```
+
 ---
 
 ## CORS and Rate Limiting
@@ -280,6 +298,23 @@ Request: POST /api/rag/match { "jobDescription": "..." }
   └─ 5. Return RagMatchResponse
           matchScore, summary, strengths, gaps  ← from Claude
           retrievedContext                       ← from vector store (step 1)
+```
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant API
+    participant OpenAI
+    participant Claude
+
+    Browser->>API: POST /api/rag/match (job description)
+    API->>API: Sanitize input
+    API->>OpenAI: Embed JD
+    OpenAI-->>API: Embedding vectors
+    API->>API: Cosine similarity search
+    API->>Claude: Generate structured match report
+    Claude-->>API: Score, matched skills, gaps (JSON)
+    API-->>Browser: 200 OK (match result)
 ```
 
 ---
