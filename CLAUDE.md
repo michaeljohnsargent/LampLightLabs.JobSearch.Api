@@ -11,7 +11,7 @@ A personal ASP.NET Core 8 Web API used to practice production-relevant backend p
 ```
 dotnet build LampLightLabs.JobSearch.Api.sln          # build solution
 dotnet run --project LampLightLabs.JobSearch.Api      # run API (Swagger at /swagger in Development)
-dotnet test                                            # run all tests (121 passing; 1 intentionally broken race condition demo)
+dotnet test                                            # run all tests (157 passing; 1 intentionally broken race condition demo)
 dotnet test --filter "FullyQualifiedName~ClassName"           # run one test class
 dotnet test --filter "FullyQualifiedName~ClassName.MethodName" # run one test method
 ```
