@@ -440,27 +440,28 @@ LampLightLabs.JobSearch.Api/
 └── Program.cs                          - DI registration and middleware
 
 LampLightLabs.JobSearch.Api.Tests/
-├── AiControllerTests.cs                - 4 tests: prompt validation, response shaping, service passthrough (IClaudeChatService mocked)
-├── AuthenticationTests.cs              - 13 tests: TokenService, AuthController, JWT integration
-├── ApiKeyAuthTests.cs                  - API key auth tests
-├── BasicAuthTests.cs                   - Basic auth tests
+├── AiControllerTests.cs                - 7 tests: prompt validation, response shaping, service passthrough (IClaudeChatService mocked)
+├── AuthenticationTests.cs              - 10 tests: TokenService, AuthController, JWT integration
+├── ApiKeyAuthTests.cs                  - 8 tests: API key auth tests
+├── BasicAuthTests.cs                   - 10 tests: Basic auth tests
 ├── OAuthTests.cs                       - 14 tests: GenerateClientToken, OAuthClientService, OAuthController, stats integration
 ├── ClaudeChatServiceTests.cs            - 5 tests: Anthropic SDK exception -> AiProviderFailureReason translation (billing/rate-limit/unauthorized/unavailable), exercised via a fake HttpMessageHandler through the real AnthropicClient rather than mocked
-├── CsvReaderServiceTests.cs            - CSV parsing tests + 5 JsonReaderService tests including Strategy Pattern proof
-├── JobStoreTests.cs                    - JobStore concurrency and state tests
-├── EfJobStoreTests.cs                  - EfJobStore CRUD tests (EF Core InMemory provider) + Strategy Pattern parity test against JobStore
+├── CsvReaderServiceTests.cs            - 4 CSV parsing tests + 5 JsonReaderService tests including Strategy Pattern proof
+├── JobStoreTests.cs                    - 5 tests: JobStore concurrency and state tests
+├── EfJobStoreTests.cs                  - 6 tests: EfJobStore CRUD tests (EF Core InMemory provider) + Strategy Pattern parity test against JobStore
 ├── IdempotencyTests.cs                 - 4 integration tests: new key, replay, missing key, key reuse conflict
 ├── NewlineSanitizingMiddlewareTests.cs - 4 tests: \n, \r\n, \r replacement; non-JSON body passthrough (no ASP.NET hosting)
 ├── PromptRepositoryTests.cs            - 6 tests: system prompt content, user message assembly (no mocks)
-├── RagControllerTests.cs               - 9 tests: validation, input sanitization (control chars, whitespace, newlines), response shaping, service passthrough (IRagMatchService mocked)
+├── RagControllerTests.cs               - 22 tests: validation, input sanitization (control chars, whitespace, newlines), response shaping, service passthrough (IRagMatchService mocked)
 ├── RagMatchServiceTests.cs             - 7 tests: JSON parsing, RetrievedContext injection, orchestration wiring (all dependencies mocked)
 ├── StatusCategorizerCharacterizationTests.cs - 13 characterization tests freezing current categorizer behavior
 ├── CorsTests.cs                        - 6 integration tests: allowed origins (dev + both production) return ACAO header, disallowed origin omits it, OPTIONS preflight returns 204 for dev and production origins
 ├── RateLimitingTests.cs                - 4 integration tests: fixed window 429 + Retry-After, sliding window 429, token bucket 429 (fresh factory per test for clean partition state)
 ├── RaceConditionDemoTests.cs           - 2 threading tests: race condition without lock (broken by design), race condition with lock (fixed)
-└── SemanticKernelControllerTests.cs    - 4 tests: prompt validation, response shaping, service passthrough (ISemanticKernelChatService mocked)
+├── SemanticKernelControllerTests.cs    - 7 tests: prompt validation, response shaping, service passthrough (ISemanticKernelChatService mocked)
+└── UsageTrackingServiceTests.cs        - 9 tests: budget/ceiling math and demo-toggle/circuit-breaker decisions (EF Core InMemory provider)
 
-Total: 143 tests (142 reliably passing; RaceConditionDemoTests.Counter_WithoutLock_ProducesUnpredictableResults is intentionally broken by design)
+Total: 158 tests (157 reliably passing; RaceConditionDemoTests.Counter_WithoutLock_ProducesUnpredictableResults is intentionally broken by design)
 ```
 
 ---
